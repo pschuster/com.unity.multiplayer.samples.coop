@@ -5,8 +5,8 @@
 ###  Made with and Including Utilities for Netcode for GameObjects
 <br>
 
-[![UnityVersion](https://img.shields.io/badge/Unity%20Version:-6000.0.52f1%20LTS-57b9d3.svg?logo=unity&color=2196F3)](https://unity.com/releases/editor/whats-new/6000.0.52)
-[![NetcodeVersion](https://img.shields.io/badge/Netcode%20Version:-2.4.3-57b9d3.svg?logo=unity&color=2196F3)](https://github.com/Unity-Technologies/com.unity.netcode.gameobjects/releases/tag/v2.4.3)
+[![UnityVersion](https://img.shields.io/badge/Unity%20Version:-6000.6.1f1-57b9d3.svg?logo=unity&color=2196F3)](https://unity.com/releases/editor/archive)
+[![NetcodeVersion](https://img.shields.io/badge/Netcode%20Version:-2.13.2-57b9d3.svg?logo=unity&color=2196F3)](https://github.com/Unity-Technologies/com.unity.netcode.gameobjects/releases/tag/v2.13.2)
 [![LatestRelease](https://img.shields.io/badge/Latest%20Github%20Release:-v3.0.0-57b9d3.svg?logo=github&color=brightgreen)](https://github.com/Unity-Technologies/com.unity.multiplayer.samples.coop/releases/tag/v3.0.0)
 <br><br>
 
@@ -15,7 +15,7 @@ Boss Room is a fully functional co-op multiplayer RPG made with Unity Netcode. I
 
 # Boss Room Sample Overview
 
-Boss Room is designed to be used in its entirety to help you explore the concepts and patterns behind a multiplayer game flow; such as character abilities, casting animations to hide latency, replicated objects, RPCs, and integration with [Multiplayer Services sessions](https://docs.unity.com/ugs/en-us/manual/mps-sdk/manual) and [Authentication](https://unity.com/products/authentication) services.
+Boss Room is designed to be used in its entirety to help you explore the concepts and patterns behind a multiplayer game flow; such as character abilities, casting animations to hide latency, replicated objects, RPCs, and integration with [4Players ODIN](https://www.4players.io/odin/) for networking, voice chat and lobbies. This fork replaces every Unity Gaming Service: game traffic runs over ODIN sockets, lobbies are ODIN Cortex gatherings, and proximity voice chat shares the same ODIN room.
 
 You can use the project as a reference starting point for your own Unity game or use elements individually.
 <br><br>
@@ -46,22 +46,22 @@ For more information on the art of Boss Room, see [ART_NOTES.md](Documentation/A
 <summary> <b>Click to expand/collapse contents</b> </summary>
 
 - ### [Getting the project](#getting-the-project-1)
-  - [Direct download](#direct-download)
-  - [Installing Git LFS to clone locally](#installing-git-lfs-to-clone-locally)
+  - [Cloning the project](#cloning-the-project)
+  - [The two ODIN packages](#the-two-odin-packages)
 - ### [Requirements](#requirements-1)
   - [Min Spec Devices](#boss-rooms-min-spec-devices-are)
 - ### [Opening the project for the first time](#opening-the-project-for-the-first-time-1) 
 - ### [Exploring the project](#exploring-the-project-1)
-  - [Registering with Unity Gaming Services (UGS)](#registering-the-project-with-unity-gaming-services-ugs)
+  - [Setting up ODIN](#setting-up-odin)
 - ### [Testing multiplayer](#testing-multiplayer-1) 
-  - [Local Multiplayer Setup](#local-multiplayer-setup)
+  - [In the editor with Multiplayer Play Mode](#in-the-editor-with-multiplayer-play-mode)
+  - [With builds](#with-builds)
   - [Multiplayer over Internet](#multiplayer-over-internet)
-  - [Multiplayer Services Setup](#multiplayer-services-setup) 
 - ### [Index of resources in this project](#index-of-resources-in-this-project-1)
   - [Gameplay](#gameplay)
   - [Game Flow](#game-flow)
   - [Connectivity](#connectivity)
-  - [Services (Sessions and Authentication)](#services-sessions-authentication)
+  - [ODIN services (lobbies, tokens, voice)](#odin-services-lobbies-tokens-voice)
   - [Tools and Utilities](#tools-and-utilities)
 - ### [Troubleshooting](#troubleshooting-1)
   - [Bugs](#bugs)
@@ -78,15 +78,38 @@ For more information on the art of Boss Room, see [ART_NOTES.md](Documentation/A
 <br>
 
 ## Getting the project
-### Direct download
- - You can download the latest version of Boss Room from our [Releases](https://github.com/Unity-Technologies/com.unity.multiplayer.samples.coop/releases) page. 
- - __Alternatively:__ click the green `Code` button and then select the 'Download Zip' option.  Please note that this will download the branch that you are currently viewing on Github.  
- - __Windows users:__ Using Windows' built-in extraction tool may generate an "Error 0x80010135: Path too long" error window which can invalidate the extraction process. A workaround for this is to shorten the zip file to a single character (eg. "c.zip") and move it to the shortest path on your computer (most often right at C:\\) and retry. If that solution fails, another workaround is to extract the downloaded zip file using [7zip](https://www.7-zip.org/).
+### Cloning the project
+
+This ODIN fork lives on the 4Players GitLab. Install Git LFS **before** cloning, otherwise every scene,
+prefab and texture arrives as a text pointer instead of an asset:
+
+```
+git lfs install
+git clone https://gitlab.4players.de/odin/examples/unity-boss-room.git
+```
+
+See [Git LFS installation options](https://github.com/git-lfs/git-lfs/wiki/Installation) if you do not have it yet.
+
+### The two ODIN packages
+
+The package manager pulls both ODIN packages from git, pinned to a commit in
+[Packages/manifest.json](Packages/manifest.json):
+
+| Package | Source |
+|---------|--------|
+| `io.fourplayers.odin` | `github.com/4Players/odin-sdk-unity`, branch `feature/socket-inbound-info` |
+| `io.fourplayers.odin.netcode` | `gitlab.4players.de/odin/integrations/odin-transport-for-unity-ngo`, branch `feature/odin-sockets` |
+
+Both branches carry work that has not been merged upstream yet: the SDK fills in the socket info for
+inbound sockets, and the transport is the rewrite on the ODIN Sockets API.
+
+Unity runs your own `git` for this, so you need git on the PATH and read access to the GitLab repository.
+To move to a newer version of either package, replace the hash after the `#` in the manifest.
 <br><br>
 
 ## Requirements
 
-BossRoom is compatible with the latest Unity Long Term Support (LTS) editor version, currently [6000.0 LTS](https://unity.com/releases/editor/archive). Please include standalone support for Windows/Mac in your installation.
+This fork is on **Unity 6000.6.1f1**. Please include standalone support for Windows/Mac in your installation.
 
 **PLEASE NOTE:** You will also need Netcode for Game Objects to use these samples. See the [Installation Documentation](https://docs-multiplayer.unity3d.com/netcode/current/installation) to prepare your environment. You can also complete the [Get Started With NGO](https://docs-multiplayer.unity3d.com/netcode/current/tutorials/get-started-ngo) tutorial to familiarize yourself with Netcode For Game Objects.
 <br><br>
@@ -112,7 +135,7 @@ Boss Room uses Git Large Files Support (LFS) to handle all large assets required
 ## Opening the project for the first time
 
 Once you have downloaded the project, follow the steps below to get up and running:
- - Check that you have installed the most recent [LTS editor version](https://unity.com/releases/unity-6-releases).
+ - Check that you have installed Unity 6000.6.1f1.
  	- Include standalone support for Windows/Mac in your installation. 
  - Add the project to the _Unity Hub_ by clicking on the **Add** button and pointing it to the root folder of the downloaded project.
  	- __Please note :__ the first time you open the project Unity will import all assets, which will take longer than usual.
@@ -133,9 +156,32 @@ One of the eight clients acts as the host/server. That client will use a composi
 Code is organized in domain-based assemblies. See the [Boss Room architecture documentation](https://docs-multiplayer.unity3d.com/netcode/current/learn/bossroom/bossroom-architecture) file for more details.
 <br><br>
 
-### Registering the project with Unity Gaming Services (UGS)
+### Setting up ODIN
 
-Boss Room leverages several services from UGS to facilitate connectivity between players. To use these services inside your project, you must [create an organization](https://support.unity.com/hc/en-us/articles/208592876-How-do-I-create-a-new-Organization-) inside the Unity Dashboard. Otherwise, you can still use Boss Room without UGS.
+Boss Room connects players through [4Players ODIN](https://www.4players.io/odin/), so no Unity service and no relay,
+port forwarding or dedicated server is needed. Settings live in `Assets/Resources/OdinSampleConfig.asset`:
+
+* **Backend Url** — invoke URL of the Boss Room backend function on ODIN Cortex, e.g.
+  `https://cortex.odin.4players.io/invoke/<projectId>/bossroom-backend`. It provides sign-in, the lobby list,
+  join codes and ODIN room tokens. See [Backend/cortex-function/README.md](Backend/cortex-function/README.md) for deployment.
+* **Development Access Key** — used when no backend URL is set. Lobbies are then reachable by join code only and tokens
+  are generated on the client. Convenient for a first test, but never ship an access key in a build.
+
+Get an account and a project in the [ODIN console](https://console.4players.io).
+
+#### Voice chat
+
+Voice runs in the same ODIN room as the game traffic, so it needs no extra connection. In game, players are heard
+positionally at their character (proximity channel). An overlay shows the microphone state and who is talking:
+
+| Key | Action |
+|-----|--------|
+| `M` | Toggle microphone mute |
+| `V` (hold) | Party radio: heard by the whole party regardless of distance |
+
+Proximity range, playback distances and the push-to-talk channels are configured on the `OdinNetcodeVoice`
+component next to the transport on the `NetworkingManager` prefab. With transcription enabled on the backend, the
+overlay also shows the live transcript with moderation flags from ODIN Cortex.
 <br><br><br>
  
 ## Testing multiplayer
@@ -143,19 +189,31 @@ Boss Room leverages several services from UGS to facilitate connectivity between
 In order to see the multiplayer functionality in action we can either run multiple instances of the game locally on your computer - using either Multiplayer Play Mode or builds - or choose to connect to a friend over the internet. See [how to test](https://docs-multiplayer.unity3d.com/netcode/current/tutorials/testing/testing_locally) for more info.
 <br><br>
 
-### Local multiplayer setup
+### In the editor with Multiplayer Play Mode
 
-First, build an executable by clicking **'File/Build Settings'** in the menu bar, and then click **'Build'**.<br>  
-![](Documentation/Images/BuildProject.png)
+The quickest way: **Window > Multiplayer > Multiplayer Play Mode**, then activate one to three virtual
+players. Each one is a separate process with its own project path, which means each signs in as its own
+player automatically. No build needed.
 
-Once the build has completed you can launch several instances of the built executable in order to both host and join a game. When using several instances locally, you will have to set different profiles for each instance for authentication purposes, by using the **'Change Profile'** button. <br>  
+### With builds
 
----
+Build an executable through **File > Build Profiles**, then start it next to the editor or several times
+side by side. Two things will otherwise stop you:
 
-💡  **Mac users:** To run multiple instances of the same app, you need to use the command line. Run `open -n BossRoom.app`
+**Check "Development Build".** The host refuses a client whose build type differs from its own
+(`IncompatibleBuildType`), and the editor always counts as a development build. Without that checkbox, a
+player built for release cannot join a host running in the editor.
 
----
+**Give every instance its own profile.** Sign-in derives the player from the device id plus the local
+profile, and in a build the profile is empty unless you say otherwise. Two instances on one machine would
+be the same player, and the host kicks the second one out as `LoggedInAgain`. Either use the
+**Change Profile** button in the main menu, or pass the profile on startup:
 
+```
+open -n "Boss Room.app" --args -AuthProfile player2
+```
+
+On macOS, `open -n` is also what lets you start the same app twice in the first place.
 <br>
 
 ### Multiplayer over Internet
@@ -164,16 +222,9 @@ To play over internet, first build an executable that is shared between all play
 
 It is possible to connect between multiple instances of the same executable OR between executables and the editor that produced it.
 
-Running the game over internet currently requires setting up a relay. 
-  
-  
-### Multiplayer Services Setup
- 
-- Boss Room uses the Multiplayer Services Package to integrate [Sessions](https://docs.unity.com/ugs/en-us/manual/mps-sdk/manual) for grouping and connecting players.
-
-- Alternatively you can use Port Forwarding. The https://portforward.com/ site has guides on how to enable port forwarding on a huge number of routers.
-- Boss Room uses `UDP` and needs a `9998` external port to be open. 
-- Make sure your host's address listens on 0.0.0.0 (127.0.0.1 is for local development only).
+Playing over the internet needs no extra setup: host and clients join the same ODIN room and exchange all Netcode
+traffic through ODIN sockets, so ODIN's servers handle connectivity. No relay allocation, no port forwarding and no
+public IP are required. Players find each other through the lobby list, a join code or quick join.
 <br><br><br>
 
 -----
@@ -225,19 +276,21 @@ Running the game over internet currently requires setting up a relay.
 * Disconnecting every client with reason - OnUserRequestedShutdown() in [Assets/Scripts/ConnectionManagement/ConnectionState/HostingState.cs ](Assets/Scripts/ConnectionManagement/ConnectionState/HostingState.cs)
 * Connection approval with reason sent to the client when denied - ApprovalCheck() in [Assets/Scripts/ConnectionManagement/ConnectionState/HostingState.cs ](Assets/Scripts/ConnectionManagement/ConnectionState/HostingState.cs)
 * Connection state machine with error handling - [Assets/Scripts/ConnectionManagement/ConnectionManager.cs ](Assets/Scripts/ConnectionManagement/ConnectionManager.cs) <br> [Assets/Scripts/ConnectionManagement/ConnectionState/](Assets/Scripts/ConnectionManagement/ConnectionState/)
-* UTP setup for IP - ConnectionMethodIP in [Assets/Scripts/ConnectionManagement/ConnectionMethod.cs](Assets/Scripts/ConnectionManagement/ConnectionMethod.cs)
-* UTP setup for Relay - ConnectionMethodRelay in [Assets/Scripts/ConnectionManagement/ConnectionMethod.cs](Assets/Scripts/ConnectionManagement/ConnectionMethod.cs)
+* ODIN transport setup - ConnectionMethodOdin in [Assets/Scripts/ConnectionManagement/ConnectionMethod.cs](Assets/Scripts/ConnectionManagement/ConnectionMethod.cs)
+* Netcode transport on ODIN sockets - OdinNetcodeTransport in the `io.fourplayers.odin.netcode` package
 * Session manager - [Packages/com.unity.multiplayer.samples.coop/Utilities/Net/SessionManager.cs ](Packages/com.unity.multiplayer.samples.coop/Utilities/Net/SessionManager.cs)
 * RTT stats - [Assets/Scripts/Utils/NetworkOverlay/NetworkStats.cs](Assets/Scripts/Utils/NetworkOverlay/NetworkStats.cs)
 
-### Services (Sessions and Authentication)
-* Session - host creation - CreateSessionRequest() in [Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs ](Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs)
-* Session - client join - JoinSessionRequest() in [Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs ](Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs)
-* Session Join with Relay - StartClientSession() in [Assets/Scripts/ConnectionManagement/ConnectionState/OfflineState.cs ](Assets/Scripts/ConnectionManagement/ConnectionState/OfflineState.cs)
-* Session Create with Relay - StartHostSession() in [Assets/Scripts/ConnectionManagement/ConnectionState/OfflineState.cs ](Assets/Scripts/ConnectionManagement/ConnectionState/OfflineState.cs)
-* Subscribing to SessionEvents - SubscribeToJoinedSessionAsync() in [Assets/Scripts/UnityServices/Sessions/MultiplayerServicesFacade.cs ](Assets/Scripts/UnityServices/Sessions/MultiplayerServicesFacade.cs)
-* Authentication - EnsurePlayerIsAuthorized() in [Assets/Scripts/UnityServices/Auth/AuthenticationServiceFacade.cs ](Assets/Scripts/UnityServices/Auth/AuthenticationServiceFacade.cs)
-* Authentication - Profile management for local instances - GetProfile() in [Assets/Scripts/Utils/ProfileManager.cs](Assets/Scripts/Utils/ProfileManager.cs)
+### ODIN services (lobbies, tokens, voice)
+* Lobby - host creation - CreateSessionRequest() in [Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs ](Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs)
+* Lobby - client join - JoinSessionRequest() in [Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs ](Assets/Scripts/Gameplay/UI/Session/SessionUIMediator.cs)
+* Lobbies, room tokens and tracking - [Assets/Scripts/OdinServices/Sessions/GatheringsFacade.cs](Assets/Scripts/OdinServices/Sessions/GatheringsFacade.cs)
+* Cortex gathering calls and local development fallback - [Assets/Scripts/OdinServices/Backend](Assets/Scripts/OdinServices/Backend)
+* Player sign-in - [Assets/Scripts/OdinServices/Auth/PlayerAuthFacade.cs](Assets/Scripts/OdinServices/Auth/PlayerAuthFacade.cs)
+* Profile management for local instances - GetProfile() in [Assets/Scripts/Utils/ProfileManager.cs](Assets/Scripts/Utils/ProfileManager.cs)
+* Voice chat, proximity and channels - OdinNetcodeVoice and OdinNetworkPlayerVoice in the `io.fourplayers.odin.netcode` package
+* Voice overlay and Cortex transcript - [Assets/Scripts/Gameplay/UI/OdinVoiceHud.cs](Assets/Scripts/Gameplay/UI/OdinVoiceHud.cs)
+* Backend function (sign-in, lobbies, tokens, transcript) - [Backend/cortex-function](Backend/cortex-function)
 * Profile manager for local play [Assets/Scripts/Utils/ProfileManager.cs](Assets/Scripts/Utils/ProfileManager.cs)
 
 ### Tools and Utilities
