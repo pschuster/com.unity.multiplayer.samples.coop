@@ -1,13 +1,14 @@
 using System;
 
-namespace Unity.BossRoom.UnityServices
+namespace Unity.BossRoom.OdinServices
 {
-    public struct UnityServiceErrorMessage
+    public struct ServiceErrorMessage
     {
         public enum Service
         {
             Authentication,
-            Session,
+            Lobby,
+            Voice,
         }
 
         public string Title;
@@ -15,7 +16,7 @@ namespace Unity.BossRoom.UnityServices
         public Service AffectedService;
         public Exception OriginalException;
 
-        public UnityServiceErrorMessage(string title, string message, Service service, Exception originalException = null)
+        public ServiceErrorMessage(string title, string message, Service service, Exception originalException = null)
         {
             Title = title;
             Message = message;

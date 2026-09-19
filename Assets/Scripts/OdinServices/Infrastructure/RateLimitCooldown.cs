@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace Unity.BossRoom.UnityServices
+namespace Unity.BossRoom.OdinServices
 {
     public class RateLimitCooldown
     {

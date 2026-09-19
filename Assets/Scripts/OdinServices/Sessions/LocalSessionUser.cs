@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
-using Unity.Services.Multiplayer;
 
-namespace Unity.BossRoom.UnityServices.Sessions
+namespace Unity.BossRoom.OdinServices.Sessions
 {
     /// <summary>
     /// Data for a local session user instance. This will update data and is observed to know when to push local user
@@ -117,11 +115,5 @@ namespace Unity.BossRoom.UnityServices.Sessions
         {
             changed?.Invoke(this);
         }
-
-        public Dictionary<string, PlayerProperty> GetDataForUnityServices() =>
-            new()
-            {
-                { "DisplayName", new PlayerProperty(DisplayName, VisibilityPropertyOptions.Member) },
-            };
     }
 }

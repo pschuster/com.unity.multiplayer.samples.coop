@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using Unity.Services.Multiplayer;
+using Unity.BossRoom.OdinServices.Backend;
 using UnityEngine;
 
-namespace Unity.BossRoom.UnityServices.Sessions
+namespace Unity.BossRoom.OdinServices.Sessions
 {
     /// <summary>
     /// A local wrapper around a session's remote data, with additional functionality for providing that data to UI
@@ -39,21 +39,15 @@ namespace Unity.BossRoom.UnityServices.Sessions
             }
         }
 
-        public string RelayJoinCode
-        {
-            get => m_Data.RelayJoinCode;
-            set
-            {
-                m_Data.RelayJoinCode = value;
-                OnChanged();
-            }
-        }
+        public string SessionName => m_Data.SessionName;
+
+        public string RoomId => m_Data.RoomId;
 
         public struct SessionData
         {
             public string SessionID { get; set; }
             public string SessionCode { get; set; }
-            public string RelayJoinCode { get; set; }
+            public string RoomId { get; set; }
             public string SessionName { get; set; }
             public bool Private { get; set; }
             public int MaxPlayerCount { get; set; }
@@ -62,7 +56,7 @@ namespace Unity.BossRoom.UnityServices.Sessions
             {
                 SessionID = existing.SessionID;
                 SessionCode = existing.SessionCode;
-                RelayJoinCode = existing.RelayJoinCode;
+                RoomId = existing.RoomId;
                 SessionName = existing.SessionName;
                 Private = existing.Private;
                 MaxPlayerCount = existing.MaxPlayerCount;
@@ -72,7 +66,7 @@ namespace Unity.BossRoom.UnityServices.Sessions
             {
                 SessionID = null;
                 SessionCode = sessionCode;
-                RelayJoinCode = null;
+                RoomId = null;
                 SessionName = null;
                 Private = false;
                 MaxPlayerCount = -1;
@@ -162,52 +156,46 @@ namespace Unity.BossRoom.UnityServices.Sessions
             OnChanged();
         }
 
-        public Dictionary<string, SessionProperty> GetDataForUnityServices() =>
-            new()
+        public void ApplyRemoteData(LobbyInfo lobby, LocalSessionUser localUser)
+        {
+            var info = new SessionData
             {
-                { "RelayJoinCode", new SessionProperty(RelayJoinCode) }
+                SessionID = lobby.id,
+                SessionName = lobby.name,
+                MaxPlayerCount = lobby.maxMembers,
+                SessionCode = lobby.joinCode,
+                Private = lobby.isPrivate,
+                RoomId = lobby.roomId,
             };
 
-        public void ApplyRemoteData(ISession session)
-        {
-            var info = new SessionData(); // Technically, this is largely redundant after the first assignment, but it won't do any harm to assign it again.
-            info.SessionID = session.Id;
-            info.SessionName = session.Name;
-            info.MaxPlayerCount = session.MaxPlayers;
-            info.SessionCode = session.Code;
-            info.Private = session.IsPrivate;
-
-            if (session.Properties != null)
-            {
-                info.RelayJoinCode = session.Properties.TryGetValue("RelayJoinCode", out var property) ? property.Value : null; // By providing RelayCode through the session properties with Member visibility, we ensure a client is connected to the session before they could attempt a relay connection, preventing timing issues between them.
-            }
-            else
-            {
-                info.RelayJoinCode = null;
-            }
-
             var localSessionUsers = new Dictionary<string, LocalSessionUser>();
-            foreach (var player in session.Players)
+            if (lobby.members != null)
             {
-                if (player.Properties != null)
+                foreach (var member in lobby.members)
                 {
-                    if (localSessionUsers.ContainsKey(player.Id))
+                    if (string.IsNullOrEmpty(member.playerId) || localSessionUsers.ContainsKey(member.playerId))
                     {
-                        localSessionUsers.Add(player.Id, localSessionUsers[player.Id]);
                         continue;
                     }
+
+                    localSessionUsers.Add(member.playerId, new LocalSessionUser
+                    {
+                        IsHost = member.isOwner,
+                        DisplayName = member.displayName,
+                        ID = member.playerId
+                    });
                 }
+            }
 
-                // If the player isn't connected to Relay, get the most recent data that the session knows.
-                // (If we haven't seen this player yet, a new local representation of the player will have already been added by the LocalSession.)
-                var incomingData = new LocalSessionUser
+            // the local development backend has no member list, but the local user is always part of its own session
+            if (localUser != null && !string.IsNullOrEmpty(localUser.ID) && !localSessionUsers.ContainsKey(localUser.ID))
+            {
+                localSessionUsers.Add(localUser.ID, new LocalSessionUser
                 {
-                    IsHost = session.Host.Equals(player.Id),
-                    DisplayName = player.Properties != null && player.Properties.TryGetValue("DisplayName", out var property) ? property.Value : default,
-                    ID = player.Id
-                };
-
-                localSessionUsers.Add(incomingData.ID, incomingData);
+                    IsHost = lobby.ownerId == localUser.ID,
+                    DisplayName = localUser.DisplayName,
+                    ID = localUser.ID
+                });
             }
 
             CopyDataFrom(info, localSessionUsers);

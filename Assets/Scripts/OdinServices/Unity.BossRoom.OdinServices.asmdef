@@ -1,13 +1,10 @@
 {
-    "name": "Unity.BossRoom.UnityServices",
+    "name": "Unity.BossRoom.OdinServices",
     "rootNamespace": "",
     "references": [
-        "Unity.Services.Core",
-        "Unity.Services.Authentication",
-        "Unity.Services.Wire.Internal",
         "Unity.BossRoom.Infrastructure",
         "VContainer",
-        "Unity.Services.Multiplayer"
+        "odinsdk"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
