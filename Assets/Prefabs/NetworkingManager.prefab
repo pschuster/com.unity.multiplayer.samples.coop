@@ -10,7 +10,9 @@ GameObject:
   m_Component:
   - component: {fileID: 5436007408952557925}
   - component: {fileID: 5436007408952557924}
-  - component: {fileID: 8549047561508999566}
+  - component: {fileID: 4182260480156394671}
+  - component: {fileID: 888540057161373420}
+  - component: {fileID: 238773851445760596}
   m_Layer: 0
   m_Name: NetworkingManager
   m_TagString: Untagged
@@ -25,13 +27,13 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 5436007408952557947}
+  serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 0}
-  m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!114 &5436007408952557924
 MonoBehaviour:
@@ -45,11 +47,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 593a2fe42fa9d37498c96f9a383b6521, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  RunInBackground: 1
-  LogLevel: 1
+  NetworkManagerExpanded: 0
   NetworkConfig:
     ProtocolVersion: 0
-    NetworkTransport: {fileID: 8549047561508999566}
+    NetworkTransport: {fileID: 4182260480156394671}
     PlayerPrefab: {fileID: 4927145850774787080, guid: 1d3f5528d25661949890bcd7f47fe81a, type: 3}
     Prefabs:
       NetworkPrefabsLists:
@@ -67,10 +68,17 @@ MonoBehaviour:
     NetworkIdRecycleDelay: 120
     RpcHashSize: 0
     LoadSceneTimeOut: 20
-    SpawnTimeout: 1
+    SpawnTimeout: 10
     EnableNetworkLogs: 1
+    NetworkTopology: 0
+    UseCMBService: 0
+    AutoSpawnPlayerPrefabClientSide: 1
+    NetworkMessageMetrics: 1
+    NetworkProfilingMetrics: 1
     OldPrefabList: []
---- !u!114 &8549047561508999566
+  RunInBackground: 1
+  LogLevel: 1
+--- !u!114 &4182260480156394671
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -79,21 +87,60 @@ MonoBehaviour:
   m_GameObject: {fileID: 5436007408952557947}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6960e84d07fb87f47956e7a81d71c4e6, type: 3}
+  m_Script: {fileID: 11500000, guid: ded24abe1c2d843cfac1823e76337f04, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: 
-  m_ProtocolType: 0
-  m_MaxPacketQueueSize: 512
-  m_MaxPayloadSize: 6144
-  m_HeartbeatTimeoutMS: 500
-  m_ConnectTimeoutMS: 1000
-  m_MaxConnectAttempts: 10
-  m_DisconnectTimeoutMS: 10000
-  ConnectionData:
-    Address: 127.0.0.1
-    Port: 7777
-    ServerListenAddress: 127.0.0.1
-  DebugSimulator:
-    PacketDelayMS: 0
-    PacketJitterMS: 0
-    PacketDropRate: 0
+  m_EditorClassIdentifier: Odin.Netcode::OdinNative.Netcode.OdinNetcodeTransport
+  Gateway: https://gateway.odin.4players.io
+  RoomName: default
+  RoomPrefab: {fileID: 0}
+  DisplayName: 
+  DevelopmentAccessKey: 
+  ConnectTimeoutMS: 15000
+  HandshakeIntervalMS: 500
+  PingIntervalMS: 1000
+  MaxUnreliablePayloadSize: 1100
+  MaxReliableChunkSize: 65536
+  VerboseLogging: 0
+--- !u!114 &888540057161373420
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5436007408952557947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2b94aaec87e5ac649a98e650ec999187, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: odinsdk::OdinNative.Unity.Audio.OdinMicrophoneReader
+  RedirectCapturedAudio: 1
+  SilenceCapturedAudio: 0
+  ContinueRecording: 1
+  Samplerate: 48000
+  CustomInputDevice: 0
+  InputDevice: 
+  AutostartListen: 1
+  CustomMicVolumeScale: 0
+  MicVolumeScale: 1
+  OnAudioData:
+    m_PersistentCalls:
+      m_Calls: []
+--- !u!114 &238773851445760596
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 5436007408952557947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4030ea314dd8643bcb72a6e0566e5755, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Odin.Netcode::OdinNative.Netcode.Voice.OdinNetcodeVoice
+  Transport: {fileID: 4182260480156394671}
+  Microphone: {fileID: 888540057161373420}
+  ProximityRange: 30
+  PositionUpdateInterval: 0.1
+  SpatialMinDistance: 2
+  SpatialMaxDistance: 30
+  SpatialRolloff: 1
