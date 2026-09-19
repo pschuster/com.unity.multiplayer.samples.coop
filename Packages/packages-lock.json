@@ -373,19 +373,21 @@
       }
     },
     "io.fourplayers.odin": {
-      "version": "file:/Users/pschuster/Documents/4Players/odin-sdk-unity",
+      "version": "https://github.com/4Players/odin-sdk-unity.git#cabd4a6a26f5aabfe11305731795f3796b368abf",
       "depth": 0,
-      "source": "local",
-      "dependencies": {}
+      "source": "git",
+      "dependencies": {},
+      "hash": "cabd4a6a26f5aabfe11305731795f3796b368abf"
     },
     "io.fourplayers.odin.netcode": {
-      "version": "file:/Users/pschuster/Documents/Gitlab/odin-transport-for-unity-ngo",
+      "version": "https://gitlab.4players.de/odin/integrations/odin-transport-for-unity-ngo.git#bb7c7f22be12a2329a2dabd509bb8984888c8779",
       "depth": 0,
-      "source": "local",
+      "source": "git",
       "dependencies": {
         "io.fourplayers.odin": "20206.1.0",
         "com.unity.netcode.gameobjects": "2.4.0"
-      }
+      },
+      "hash": "bb7c7f22be12a2329a2dabd509bb8984888c8779"
     },
     "jp.hadashikick.vcontainer": {
       "version": "1.19.0",
