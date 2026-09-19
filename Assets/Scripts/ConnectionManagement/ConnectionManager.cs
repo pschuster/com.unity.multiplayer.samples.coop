@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Unity.BossRoom.Utils;
 using Unity.Netcode;
 using UnityEngine;
-using UUnity.BossRoom.ConnectionManagement;
 using VContainer;
 
 namespace Unity.BossRoom.ConnectionManagement
@@ -159,9 +158,12 @@ namespace Unity.BossRoom.ConnectionManagement
             m_CurrentState.StartClientSession(playerName);
         }
 
-        public void StartClientIp(string playerName, string ipaddress, int port)
+        /// <summary>
+        /// Starts a client with a custom connection method, e.g. for tests that bring their own transport setup.
+        /// </summary>
+        public void StartClient(ConnectionMethodBase connectionMethod)
         {
-            m_CurrentState.StartClientIP(playerName, ipaddress, port);
+            m_CurrentState.StartClient(connectionMethod);
         }
 
         public void StartHostSession(string playerName)
@@ -169,9 +171,12 @@ namespace Unity.BossRoom.ConnectionManagement
             m_CurrentState.StartHostSession(playerName);
         }
 
-        public void StartHostIp(string playerName, string ipaddress, int port)
+        /// <summary>
+        /// Starts a host with a custom connection method, e.g. for tests that bring their own transport setup.
+        /// </summary>
+        public void StartHost(ConnectionMethodBase connectionMethod)
         {
-            m_CurrentState.StartHostIP(playerName, ipaddress, port);
+            m_CurrentState.StartHost(connectionMethod);
         }
 
         public void RequestShutdown()

@@ -5,9 +5,10 @@ using Unity.BossRoom.ConnectionManagement;
 using Unity.BossRoom.Gameplay.GameState;
 using Unity.BossRoom.Gameplay.Messages;
 using Unity.BossRoom.Infrastructure;
-using Unity.BossRoom.UnityServices;
-using Unity.BossRoom.UnityServices.Auth;
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices;
+using Unity.BossRoom.OdinServices.Auth;
+using Unity.BossRoom.OdinServices.Backend;
+using Unity.BossRoom.OdinServices.Sessions;
 using Unity.BossRoom.Utils;
 using Unity.Netcode;
 using UnityEngine;
@@ -30,7 +31,7 @@ namespace Unity.BossRoom.ApplicationLifecycle
         NetworkManager m_NetworkManager;
 
         LocalSession m_LocalSession;
-        MultiplayerServicesFacade m_MultiplayerServicesFacade;
+        GatheringsFacade m_GatheringsFacade;
 
         IDisposable m_Subscriptions;
 
@@ -53,7 +54,7 @@ namespace Unity.BossRoom.ApplicationLifecycle
             // These message channels are essential and persist for the lifetime of the Session and relay services
             // Registering as instance to prevent code stripping on iOS
             builder.RegisterInstance(new MessageChannel<QuitApplicationMessage>()).AsImplementedInterfaces();
-            builder.RegisterInstance(new MessageChannel<UnityServiceErrorMessage>()).AsImplementedInterfaces();
+            builder.RegisterInstance(new MessageChannel<ServiceErrorMessage>()).AsImplementedInterfaces();
             builder.RegisterInstance(new MessageChannel<ConnectStatus>()).AsImplementedInterfaces();
             builder.RegisterInstance(new MessageChannel<DoorStateChangedEventMessage>()).AsImplementedInterfaces();
 
@@ -71,23 +72,37 @@ namespace Unity.BossRoom.ApplicationLifecycle
             // Buffered message channels hold the latest received message in buffer and pass to any new subscribers
             builder.RegisterInstance(new BufferedMessageChannel<SessionListFetchedMessage>()).AsImplementedInterfaces();
 
-            // All the Session service stuff, bound here so that it persists through scene loads
-            builder.Register<AuthenticationServiceFacade>(Lifetime.Singleton); //a manager entity that allows us to do anonymous authentication with unity services
+            // ODIN services, bound here so that they persist through scene loads.
+            // With a backend URL, lobbies and tokens come from the Cortex function; otherwise the local development mode is used.
+            var odinSampleConfig = OdinSampleConfig.Load();
+            builder.RegisterInstance(odinSampleConfig);
+            if (odinSampleConfig.UsesCortexBackend)
+            {
+                builder.Register<ILobbyBackend, CortexLobbyBackend>(Lifetime.Singleton);
+            }
+            else
+            {
+                builder.Register<ILobbyBackend, LocalLobbyBackend>(Lifetime.Singleton);
+            }
 
-            // MultiplayerServicesFacade is registered as entrypoint because it wants a callback after container is built to do it's initialization
-            builder.RegisterEntryPoint<MultiplayerServicesFacade>(Lifetime.Singleton).AsSelf();
+            builder.Register<PlayerAuthFacade>(Lifetime.Singleton);
+            builder.Register<GatheringsFacade>(Lifetime.Singleton);
         }
 
         private void Start()
         {
             m_LocalSession = Container.Resolve<LocalSession>();
-            m_MultiplayerServicesFacade = Container.Resolve<MultiplayerServicesFacade>();
+            m_GatheringsFacade = Container.Resolve<GatheringsFacade>();
 
             var quitApplicationSub = Container.Resolve<ISubscriber<QuitApplicationMessage>>();
 
             var subHandles = new DisposableGroup();
             subHandles.Add(quitApplicationSub.Subscribe(QuitGame));
             m_Subscriptions = subHandles;
+
+            // voice overlay for all scenes; it only shows while connected
+            var voiceHud = new GameObject("ODIN Voice HUD").AddComponent<Unity.BossRoom.Gameplay.UI.OdinVoiceHud>();
+            Container.Inject(voiceHud);
 
             Application.wantsToQuit += OnWantToQuit;
             DontDestroyOnLoad(gameObject);
@@ -103,9 +118,9 @@ namespace Unity.BossRoom.ApplicationLifecycle
                 m_Subscriptions.Dispose();
             }
 
-            if (m_MultiplayerServicesFacade != null)
+            if (m_GatheringsFacade != null)
             {
-                m_MultiplayerServicesFacade.EndTracking();
+                m_GatheringsFacade.EndTracking();
             }
 
             base.OnDestroy();
@@ -120,7 +135,7 @@ namespace Unity.BossRoom.ApplicationLifecycle
             // We want to quit anyways, so if anything happens while trying to leave the Session, log the exception then carry on
             try
             {
-                m_MultiplayerServicesFacade.EndTracking();
+                m_GatheringsFacade.EndTracking();
             }
             catch (Exception e)
             {

@@ -5,13 +5,13 @@
         "Unity.BossRoom.Gameplay",
         "Unity.BossRoom.ApplicationLifecycle.Messages",
         "Unity.BossRoom.Infrastructure",
-        "Unity.BossRoom.UnityServices",
         "Unity.Netcode.Runtime",
         "Unity.Collections",
         "Unity.Multiplayer.Samples.Utilities",
         "Unity.BossRoom.Utils",
         "Unity.BossRoom.ConnectionManagement",
-        "VContainer"
+        "VContainer",
+        "Unity.BossRoom.OdinServices"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

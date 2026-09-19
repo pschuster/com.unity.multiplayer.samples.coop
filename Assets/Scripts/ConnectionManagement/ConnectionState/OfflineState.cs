@@ -1,13 +1,11 @@
-using System;
-using Unity.BossRoom.ConnectionManagement;
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices.Auth;
+using Unity.BossRoom.OdinServices.Sessions;
 using Unity.BossRoom.Utils;
 using Unity.Multiplayer.Samples.Utilities;
-using UnityEngine;
 using UnityEngine.SceneManagement;
 using VContainer;
 
-namespace UUnity.BossRoom.ConnectionManagement
+namespace Unity.BossRoom.ConnectionManagement
 {
     /// <summary>
     /// Connection state corresponding to when the NetworkManager is shut down. From this state we can transition to the
@@ -16,17 +14,17 @@ namespace UUnity.BossRoom.ConnectionManagement
     class OfflineState : ConnectionState
     {
         [Inject]
-        MultiplayerServicesFacade m_MultiplayerServicesFacade;
+        GatheringsFacade m_GatheringsFacade;
+        [Inject]
+        PlayerAuthFacade m_PlayerAuthFacade;
         [Inject]
         ProfileManager m_ProfileManager;
-        [Inject]
-        LocalSession m_LocalSession;
 
         const string k_MainMenuSceneName = "MainMenu";
 
         public override void Enter()
         {
-            m_MultiplayerServicesFacade.EndTracking();
+            m_GatheringsFacade.EndTracking();
             m_ConnectionManager.NetworkManager.Shutdown();
             if (SceneManager.GetActiveScene().name != k_MainMenuSceneName)
             {
@@ -36,30 +34,32 @@ namespace UUnity.BossRoom.ConnectionManagement
 
         public override void Exit() { }
 
-        public override void StartClientIP(string playerName, string ipaddress, int port)
-        {
-            var connectionMethod = new ConnectionMethodIP(ipaddress, (ushort)port, m_ConnectionManager, m_ProfileManager, playerName);
-            m_ConnectionManager.m_ClientReconnecting.Configure(connectionMethod);
-            m_ConnectionManager.ChangeState(m_ConnectionManager.m_ClientConnecting.Configure(connectionMethod));
-        }
-
         public override void StartClientSession(string playerName)
         {
-            var connectionMethod = new ConnectionMethodRelay(m_MultiplayerServicesFacade, m_ConnectionManager, m_ProfileManager, playerName);
-            m_ConnectionManager.m_ClientReconnecting.Configure(connectionMethod);
-            m_ConnectionManager.ChangeState(m_ConnectionManager.m_ClientConnecting.Configure(connectionMethod));
-        }
-
-        public override void StartHostIP(string playerName, string ipaddress, int port)
-        {
-            var connectionMethod = new ConnectionMethodIP(ipaddress, (ushort)port, m_ConnectionManager, m_ProfileManager, playerName);
-            m_ConnectionManager.ChangeState(m_ConnectionManager.m_StartingHost.Configure(connectionMethod));
+            StartClient(new ConnectionMethodOdin(m_GatheringsFacade, m_ConnectionManager, GetPlayerId(), playerName));
         }
 
         public override void StartHostSession(string playerName)
         {
-            var connectionMethod = new ConnectionMethodRelay(m_MultiplayerServicesFacade, m_ConnectionManager, m_ProfileManager, playerName);
+            StartHost(new ConnectionMethodOdin(m_GatheringsFacade, m_ConnectionManager, GetPlayerId(), playerName));
+        }
+
+        public override void StartClient(ConnectionMethodBase connectionMethod)
+        {
+            m_ConnectionManager.m_ClientReconnecting.Configure(connectionMethod);
+            m_ConnectionManager.ChangeState(m_ConnectionManager.m_ClientConnecting.Configure(connectionMethod));
+        }
+
+        public override void StartHost(ConnectionMethodBase connectionMethod)
+        {
             m_ConnectionManager.ChangeState(m_ConnectionManager.m_StartingHost.Configure(connectionMethod));
+        }
+
+        /// The player id identifies a player across reconnects, so SessionManager can restore their character.
+        /// Without a sign-in (e.g. in tests) it falls back to a per-install GUID plus the local profile.
+        string GetPlayerId()
+        {
+            return m_PlayerAuthFacade.IsSignedIn ? m_PlayerAuthFacade.PlayerId : ClientPrefs.GetGuid() + m_ProfileManager.Profile;
         }
     }
 }

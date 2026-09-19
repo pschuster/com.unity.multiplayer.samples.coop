@@ -1,6 +1,5 @@
 using System;
 using Unity.BossRoom.Infrastructure;
-using Unity.BossRoom.UnityServices.Sessions;
 using Unity.Multiplayer.Samples.BossRoom;
 using Unity.Netcode;
 using UnityEngine;
@@ -14,10 +13,6 @@ namespace Unity.BossRoom.ConnectionManagement
     /// </summary>
     class StartingHostState : OnlineState
     {
-        [Inject]
-        MultiplayerServicesFacade m_MultiplayerServicesFacade;
-        [Inject]
-        LocalSession m_LocalSession;
         ConnectionMethodBase m_ConnectionMethod;
 
         public StartingHostState Configure(ConnectionMethodBase baseConnectionMethod)
@@ -70,13 +65,10 @@ namespace Unity.BossRoom.ConnectionManagement
             {
                 m_ConnectionMethod.SetupHostConnection();
 
-                if (m_ConnectionMethod is ConnectionMethodIP)
+                // NGO's StartHost launches everything
+                if (!m_ConnectionManager.NetworkManager.StartHost())
                 {
-                    // NGO's StartHost launches everything
-                    if (!m_ConnectionManager.NetworkManager.StartHost())
-                    {
-                        StartHostFailed();
-                    }
+                    StartHostFailed();
                 }
             }
             catch (Exception)

@@ -26,13 +26,13 @@ namespace Unity.BossRoom.ConnectionManagement
 
         public virtual void OnServerStarted() { }
 
-        public virtual void StartClientIP(string playerName, string ipaddress, int port) { }
-
         public virtual void StartClientSession(string playerName) { }
 
-        public virtual void StartHostIP(string playerName, string ipaddress, int port) { }
-
         public virtual void StartHostSession(string playerName) { }
+
+        public virtual void StartClient(ConnectionMethodBase connectionMethod) { }
+
+        public virtual void StartHost(ConnectionMethodBase connectionMethod) { }
 
         public virtual void OnUserRequestedShutdown() { }
 
