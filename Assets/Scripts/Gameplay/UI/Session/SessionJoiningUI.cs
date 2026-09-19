@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Unity.BossRoom.Infrastructure;
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices.Sessions;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;

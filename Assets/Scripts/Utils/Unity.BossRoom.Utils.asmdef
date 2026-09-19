@@ -4,8 +4,6 @@
     "references": [
         "Unity.TextMeshPro",
         "Unity.Netcode.Runtime",
-        "Unity.Multiplayer.Tools.NetworkSimulator.Runtime",
-        "Unity.Networking.Transport",
         "Unity.Collections",
         "Unity.InputSystem"
     ],

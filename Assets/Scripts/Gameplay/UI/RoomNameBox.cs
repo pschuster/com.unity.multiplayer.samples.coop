@@ -1,6 +1,6 @@
 using System;
 using TMPro;
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices.Sessions;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
@@ -39,7 +39,7 @@ namespace Unity.BossRoom.Gameplay.UI
             if (!string.IsNullOrEmpty(localSession.SessionCode))
             {
                 m_SessionCode = localSession.SessionCode;
-                m_RoomNameText.text = $"Session Code: {m_SessionCode}";
+                m_RoomNameText.text = $"Join Code: {m_SessionCode}";
                 gameObject.SetActive(true);
                 m_CopyToClipboardButton.gameObject.SetActive(true);
             }
