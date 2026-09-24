@@ -37,6 +37,9 @@ namespace Unity.BossRoom.Gameplay.Cortex
     /// <item>For the local player's own sanctions, shows a warning or mute notice in the <see cref="OdinVoiceHud"/>,
     /// or, on a ban, shows a popup and leaves the game. Rejoining is then refused by the join gate in the backend
     /// function.</item>
+    /// <item>With the project setting <c>transcriptPush</c>, hands every <c>cortex.transcript</c> line to the HUD
+    /// the moment the bot sends it, instead of the HUD waiting for its next poll. After missed frames or a bot
+    /// rejoin it asks the HUD to catch up through polling.</item>
     /// </list>
     ///
     /// <para>Needs an ODIN Unity SDK with odin-sdk-unity#2 (<c>MessageReceived</c> is raised); older versions never
@@ -158,6 +161,12 @@ namespace Unity.BossRoom.Gameplay.Cortex
                 m_BotHasTag = hasBotTag;
                 m_LastSeq = 0;
                 Debug.Log($"[Cortex] Bot joined the room as peer {peerId}{(hasBotTag ? string.Empty : " (identified by user id only)")}");
+                // a (re)joining bot may have transcribed lines while it was not in the room
+                if (m_Hud != null)
+                {
+                    m_Hud.RequestTranscriptCatchUp();
+                }
+
                 return;
             }
 
@@ -195,8 +204,12 @@ namespace Unity.BossRoom.Gameplay.Cortex
 
             if (m_LastSeq != 0 && frame.seq != m_LastSeq + 1)
             {
-                // mutes cannot be caught up through an endpoint; the next cortex.mutes (on any join) resyncs the set
+                // transcript lines are caught up through polling; mutes resync with the next cortex.mutes (on any join)
                 Debug.LogWarning($"[Cortex] Missed {frame.seq - m_LastSeq - 1} frame(s) from the bot (seq {m_LastSeq} -> {frame.seq})");
+                if (m_Hud != null)
+                {
+                    m_Hud.RequestTranscriptCatchUp();
+                }
             }
 
             m_LastSeq = frame.seq;
@@ -210,7 +223,14 @@ namespace Unity.BossRoom.Gameplay.Cortex
                 case CortexRoomProtocol.k_TypeSanction:
                     OnSanction(frame.data);
                     break;
-                // cortex.transcript is still shown through polling by OdinVoiceHud; custom game messages are ignored here
+                case CortexRoomProtocol.k_TypeTranscript:
+                    if (m_Hud != null)
+                    {
+                        m_Hud.AddPushedTranscript(frame.data.segmentId, frame.data.peerId, frame.data.text, frame.data.interim, frame.data.ts);
+                    }
+
+                    break;
+                // custom game messages (types outside cortex.*) are ignored here
             }
         }
 

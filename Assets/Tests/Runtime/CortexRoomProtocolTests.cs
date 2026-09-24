@@ -136,6 +136,63 @@ namespace Unity.BossRoom.Tests.Runtime
         }
 
         [Test]
+        public void ParsesATranscriptFrame()
+        {
+            var bytes = Frame("{\"type\":\"cortex.transcript\",\"id\":\"f4\",\"seq\":3,\"data\":{\"segmentId\":\"m1\",\"peerId\":17," +
+                              "\"participantId\":null,\"text\":\"ready when you are\",\"lang\":\"en\",\"interim\":false,\"seq\":42," +
+                              "\"ts\":\"2026-09-23T10:00:03.120Z\"}}");
+
+            Assert.IsTrue(CortexRoomProtocol.TryParse(bytes, out var frame));
+            Assert.AreEqual(CortexRoomProtocol.k_TypeTranscript, frame.type);
+            Assert.AreEqual(3, frame.seq, "the frame counter, not the transcript cursor in data.seq");
+            Assert.AreEqual("m1", frame.data.segmentId);
+            Assert.AreEqual(17u, frame.data.peerId);
+            Assert.AreEqual("ready when you are", frame.data.text);
+            Assert.IsFalse(frame.data.interim);
+            Assert.AreEqual("2026-09-23T10:00:03.120Z", frame.data.ts);
+        }
+
+        [Test]
+        public void TranscriptBufferShowsAMessageOnceWhetherPushedOrPolled()
+        {
+            var buffer = new CortexTranscriptBuffer(6);
+
+            Assert.IsTrue(buffer.Upsert("m1", "Alice: pushed", replace: true));
+            Assert.IsFalse(buffer.Upsert("m1", "Alice: polled", replace: false), "polling returns a line that was pushed");
+
+            CollectionAssert.AreEqual(new[] { "Alice: pushed" }, buffer.Lines);
+        }
+
+        [Test]
+        public void TranscriptBufferReplacesAnInterimCaptionInPlace()
+        {
+            var buffer = new CortexTranscriptBuffer(6);
+            buffer.Upsert("m1", "Alice: ready wh", replace: true);
+            buffer.Upsert("m2", "Bob: ok", replace: true);
+
+            Assert.IsTrue(buffer.Upsert("m1", "Alice: ready when you are", replace: true));
+
+            CollectionAssert.AreEqual(new[] { "Alice: ready when you are", "Bob: ok" }, buffer.Lines);
+        }
+
+        [Test]
+        public void TranscriptBufferKeepsTheNewestLinesAndDoesNotRevivePrunedOnes()
+        {
+            var buffer = new CortexTranscriptBuffer(2);
+            buffer.Upsert("m1", "one", replace: true);
+            buffer.Upsert("m2", "two", replace: true);
+            buffer.Upsert("m3", "three", replace: true);
+
+            CollectionAssert.AreEqual(new[] { "two", "three" }, buffer.Lines);
+            Assert.IsFalse(buffer.Upsert("m1", "one again", replace: false), "a late poll does not bring back a scrolled-out line");
+            CollectionAssert.AreEqual(new[] { "two", "three" }, buffer.Lines);
+
+            buffer.Clear();
+            Assert.AreEqual(0, buffer.Count);
+            Assert.IsTrue(buffer.Upsert("m1", "one", replace: false), "a new session starts empty");
+        }
+
+        [Test]
         public void ClassifiesSanctionTypes()
         {
             Assert.IsTrue(CortexRoomProtocol.IsVoiceMute("mute"));

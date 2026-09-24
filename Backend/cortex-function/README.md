@@ -84,6 +84,13 @@ Cortex enforces sanctions in two layers, and the sample implements the client si
   audio. It shows warnings and mutes to the affected player, and leaves the game on a ban. The protocol parsing
   lives in `Assets/Scripts/OdinServices/Cortex/CortexRoomProtocol.cs` and is covered by `CortexRoomProtocolTests`.
 
+**Live transcript.** With the project's **Transcript push** set to *All* (console → Settings → Bot → Room Push), the
+bot pushes every transcribed line into the room and `CortexRoomListener` shows it in the HUD immediately, roughly
+2–4 s after the end of a sentence (speech-to-text latency) instead of waiting for the next poll. Polling
+`/lobbies/{id}/transcript` stays as the fallback: every 2 s while nothing is pushed, every 15 s once push is
+active, and right away after missed frames or a bot rejoin. Lines are de-duplicated by message id. Pushed lines carry
+no moderation flags; only polled ones are marked.
+
 This needs an ODIN Unity SDK that raises `MessageReceived` (odin-sdk-unity#2, pinned in `Packages/manifest.json`).
 
 ## Local development without a backend

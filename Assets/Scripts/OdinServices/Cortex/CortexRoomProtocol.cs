@@ -150,10 +150,107 @@ namespace Unity.BossRoom.OdinServices.Cortex
 
         // cortex.transcript
 
-        /// <summary>Speaker of a transcribed segment.</summary>
+        /// <summary>The segment; equals the message id, and interim updates of one segment reuse it.</summary>
+        public string segmentId;
+        /// <summary>ODIN peer of the speaker: attach the line to that peer.</summary>
         public uint peerId;
         /// <summary>Transcribed text.</summary>
         public string text;
+        /// <summary>Language detected by the speech-to-text provider, empty if unknown.</summary>
+        public string lang;
+        /// <summary>True for a provisional caption that a later frame with the same segment replaces.</summary>
+        public bool interim;
+        /// <summary>ISO 8601 time of the segment; the backend's transcript cursor compares against it.</summary>
+        public string ts;
+    }
+
+    /// <summary>
+    /// The latest transcript lines, filled from pushed <c>cortex.transcript</c> frames and from polling alike.
+    /// </summary>
+    /// <remarks>
+    /// Push and polling overlap on purpose: push shows a line within the speech-to-text latency, and a slow poll
+    /// still catches what push missed (a frame gap, a bot rejoin, or other players' lines when the project pushes
+    /// only to the speaker). Both sources use the Cortex message id (a frame's <c>segmentId</c> is the message id),
+    /// so a line that arrives twice is stored once, and an update of a segment replaces its line in place.
+    /// </remarks>
+    public class CortexTranscriptBuffer
+    {
+        readonly int m_MaxLines;
+        readonly List<KeyValuePair<string, string>> m_Lines = new List<KeyValuePair<string, string>>();
+        readonly HashSet<string> m_Seen = new HashSet<string>();
+
+        /// <summary>Creates a buffer that keeps the newest <paramref name="maxLines"/> lines.</summary>
+        public CortexTranscriptBuffer(int maxLines)
+        {
+            m_MaxLines = maxLines;
+        }
+
+        /// <summary>The kept lines, oldest first.</summary>
+        public IEnumerable<string> Lines
+        {
+            get
+            {
+                foreach (var line in m_Lines)
+                {
+                    yield return line.Value;
+                }
+            }
+        }
+
+        /// <summary>Number of kept lines.</summary>
+        public int Count => m_Lines.Count;
+
+        /// <summary>
+        /// Adds a line, or replaces the line of the same message.
+        /// </summary>
+        /// <param name="id">Cortex message id (the segment id of a pushed frame).</param>
+        /// <param name="line">The rendered line.</param>
+        /// <param name="replace">True to update a line that is already there (an interim caption becoming final);
+        /// false to ignore a message that was already shown (polling returning a pushed line).</param>
+        /// <returns>True if the visible lines changed.</returns>
+        public bool Upsert(string id, string line, bool replace)
+        {
+            if (string.IsNullOrEmpty(id))
+            {
+                return false;
+            }
+
+            if (m_Seen.Contains(id))
+            {
+                if (!replace)
+                {
+                    return false;
+                }
+
+                for (var i = 0; i < m_Lines.Count; i++)
+                {
+                    if (m_Lines[i].Key == id)
+                    {
+                        m_Lines[i] = new KeyValuePair<string, string>(id, line);
+                        return true;
+                    }
+                }
+
+                // seen but already scrolled out: an old segment is not brought back
+                return false;
+            }
+
+            m_Seen.Add(id);
+            m_Lines.Add(new KeyValuePair<string, string>(id, line));
+            while (m_Lines.Count > m_MaxLines)
+            {
+                m_Lines.RemoveAt(0);
+            }
+
+            return true;
+        }
+
+        /// <summary>Forgets everything, e.g. when the session changes.</summary>
+        public void Clear()
+        {
+            m_Lines.Clear();
+            m_Seen.Clear();
+        }
     }
 
     /// <summary>

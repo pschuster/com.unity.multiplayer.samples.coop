@@ -329,7 +329,8 @@ Client-Infrastruktur braucht. Phase 4 nur vorziehen, wenn ein Kunde Push *vor* d
 >   - Warnung und Mute erscheinen als HUD-Hinweis, ein Ban verlässt das Spiel.
 >   - Parser und Mute-Set liegen in `CortexRoomProtocol`, getestet in `CortexRoomProtocolTests`.
 >   - SDK-Pin auf odin-sdk-unity#2 (`b9c25468`).
-> - **Offen:** Transcript-Push statt Polling (`cortex.transcript`) sowie Phase 1/2 im Sample (Cursor, `/client/v1`, HMAC-Tokens ablösen).
+> - **Transcript-Push (2026-09-24):** `cortex.transcript`-Frames erscheinen sofort im HUD. Polling bleibt als Fallback: alle 2 s ohne Push, alle 15 s mit Push, sofort nach einer Frame-Lücke. Doppelte Zeilen werden per Message-ID entfernt; im Projekt ist *All* gesetzt.
+> - **Offen:** Phase 1/2 im Sample (Cursor, `/client/v1`, HMAC-Tokens ablösen).
 
 - Nach Deploy-Check: `/transcript/{afterTimestamp}` → `?after=`, `Content-Type: text/plain`-Workaround raus.
 - Nach Phase 1: `transcript()` nutzt `after=<seq>&include=annotations`, kein In-Memory-Filtern mehr.

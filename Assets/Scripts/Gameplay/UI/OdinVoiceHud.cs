@@ -5,6 +5,7 @@ using OdinNative.Netcode;
 using OdinNative.Netcode.Voice;
 using TMPro;
 using Unity.BossRoom.OdinServices.Backend;
+using Unity.BossRoom.OdinServices.Cortex;
 using Unity.BossRoom.OdinServices.Sessions;
 using Unity.Netcode;
 using UnityEngine;
@@ -19,10 +20,18 @@ namespace Unity.BossRoom.Gameplay.UI
     /// and, if the backend runs transcription, the latest transcribed lines with moderation flags from ODIN Cortex.
     /// It also shows moderation notices for the local player (warnings, mutes) that the
     /// <see cref="Cortex.CortexRoomListener"/> receives from the Cortex bot in the room.
+    ///
+    /// Transcript lines come from two sources. With the Cortex project setting <c>transcriptPush</c>, the bot pushes
+    /// each line into the room and the listener hands it over through <see cref="AddPushedTranscript"/>, so it shows
+    /// within the speech-to-text latency. Polling the backend function stays as the fallback: every
+    /// 2 s while nothing is pushed, and only every 15 s once push is active, to catch missed frames (or other
+    /// players' lines if the project pushes to the speaker only).
     /// </summary>
     public class OdinVoiceHud : MonoBehaviour
     {
         const float k_TranscriptPollInterval = 2f;
+        /// <summary>Safety-net poll interval while lines arrive through room push.</summary>
+        const float k_TranscriptPushPollInterval = 15f;
         const int k_MaxTranscriptLines = 6;
         const Key k_MuteKey = Key.M;
         const Key k_PartyRadioKey = Key.V;
@@ -32,7 +41,7 @@ namespace Unity.BossRoom.Gameplay.UI
         [Inject]
         NetworkManager m_NetworkManager;
 
-        readonly Queue<string> m_TranscriptLines = new Queue<string>();
+        readonly CortexTranscriptBuffer m_TranscriptLines = new CortexTranscriptBuffer(k_MaxTranscriptLines);
         readonly HashSet<uint> m_TalkingPeers = new HashSet<uint>();
         readonly StringBuilder m_Text = new StringBuilder();
 
@@ -53,6 +62,8 @@ namespace Unity.BossRoom.Gameplay.UI
         string m_TranscriptSessionId;
         float m_NextTranscriptPoll;
         bool m_IsPolling;
+        /// <summary>True once the bot pushed a transcript line in this session; polling then slows down.</summary>
+        bool m_TranscriptPushActive;
 
         void Awake()
         {
@@ -233,7 +244,7 @@ namespace Unity.BossRoom.Gameplay.UI
             }
 
             m_IsPolling = true;
-            m_NextTranscriptPoll = Time.unscaledTime + k_TranscriptPollInterval;
+            m_NextTranscriptPoll = Time.unscaledTime + (m_TranscriptPushActive ? k_TranscriptPushPollInterval : k_TranscriptPollInterval);
             try
             {
                 var messages = await m_GatheringsFacade.GetTranscriptAsync(m_LastTranscriptTimestamp);
@@ -245,12 +256,10 @@ namespace Unity.BossRoom.Gameplay.UI
                 foreach (var message in messages)
                 {
                     AddTranscriptLine(message);
-                    m_LastTranscriptTimestamp = message.timestamp;
+                    AdvanceTranscriptCursor(message.timestamp);
                 }
 
-                m_TranscriptText.SetText(m_TranscriptLines.Count == 0
-                    ? "<size=80%><i>Voice transcript will appear here</i></size>"
-                    : string.Join("\n", m_TranscriptLines));
+                RenderTranscript();
             }
             catch (Exception e)
             {
@@ -271,11 +280,74 @@ namespace Unity.BossRoom.Gameplay.UI
                 line = $"<color=#ff6666>{line} <size=70%>[flagged: {categories}]</size></color>";
             }
 
-            m_TranscriptLines.Enqueue(line);
-            while (m_TranscriptLines.Count > k_MaxTranscriptLines)
+            // a line that was pushed already is not shown twice
+            m_TranscriptLines.Upsert(message.id, line, replace: false);
+        }
+
+        /// <summary>
+        /// Shows a transcript line the Cortex bot pushed into the room (frame <c>cortex.transcript</c>).
+        /// </summary>
+        /// <param name="segmentId">The segment; the Cortex message id, reused by interim updates.</param>
+        /// <param name="peerId">ODIN peer of the speaker.</param>
+        /// <param name="text">The transcribed text.</param>
+        /// <param name="interim">True for a provisional caption that a later frame replaces.</param>
+        /// <param name="timestamp">ISO 8601 time of the segment, used to advance the polling cursor.</param>
+        public void AddPushedTranscript(string segmentId, uint peerId, string text, bool interim, string timestamp)
+        {
+            if (string.IsNullOrEmpty(text))
             {
-                m_TranscriptLines.Dequeue();
+                return;
             }
+
+            m_TranscriptPushActive = true;
+            var transport = m_NetworkManager != null ? m_NetworkManager.NetworkConfig.NetworkTransport as OdinNetcodeTransport : null;
+            var name = transport != null && transport.TryGetPeerName(peerId, out var peerName) ? peerName : "Player";
+            var line = interim ? $"<b>{name}:</b> <i>{text}</i>" : $"<b>{name}:</b> {text}";
+
+            // an interim caption is replaced in place by its next update or its final text
+            if (m_TranscriptLines.Upsert(segmentId, line, replace: true))
+            {
+                RenderTranscript();
+            }
+
+            if (!interim)
+            {
+                AdvanceTranscriptCursor(timestamp);
+            }
+        }
+
+        /// <summary>
+        /// Polls once right away, e.g. after the listener noticed missed frames or the bot rejoined the room.
+        /// </summary>
+        public void RequestTranscriptCatchUp()
+        {
+            m_NextTranscriptPoll = 0;
+        }
+
+        /// <summary>
+        /// Moves the polling cursor forward (the backend returns messages newer than it). Pushed and polled lines
+        /// can arrive out of order, so the cursor never moves back.
+        /// </summary>
+        void AdvanceTranscriptCursor(string timestamp)
+        {
+            if (!DateTime.TryParse(timestamp, null, System.Globalization.DateTimeStyles.RoundtripKind, out var next))
+            {
+                return;
+            }
+
+            if (string.IsNullOrEmpty(m_LastTranscriptTimestamp) ||
+                !DateTime.TryParse(m_LastTranscriptTimestamp, null, System.Globalization.DateTimeStyles.RoundtripKind, out var current) ||
+                next > current)
+            {
+                m_LastTranscriptTimestamp = timestamp;
+            }
+        }
+
+        void RenderTranscript()
+        {
+            m_TranscriptText.SetText(m_TranscriptLines.Count == 0
+                ? "<size=80%><i>Voice transcript will appear here</i></size>"
+                : string.Join("\n", m_TranscriptLines.Lines));
         }
 
         void ResetTranscript()
@@ -283,6 +355,7 @@ namespace Unity.BossRoom.Gameplay.UI
             m_TranscriptLines.Clear();
             m_LastTranscriptTimestamp = null;
             m_TranscriptSessionId = null;
+            m_TranscriptPushActive = false;
             if (m_TranscriptText != null)
             {
                 m_TranscriptText.SetText(string.Empty);
