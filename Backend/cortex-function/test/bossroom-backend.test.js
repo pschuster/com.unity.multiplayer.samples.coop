@@ -46,9 +46,17 @@ function startMock() {
       const path = url.pathname;
 
       if (req.method === 'POST' && path === `${prefix}/participants`) {
+        // like Cortex: create or look up by external user id, without touching the name of an existing one
         let p = [...state.participants.values()].find((x) => x.externalUserId === body.externalUserId);
         if (!p) { p = { id: crypto.randomUUID(), externalUserId: body.externalUserId, displayName: body.displayName }; state.participants.set(p.id, p); }
         return send(201, p);
+      }
+      const participantMatch = path.match(new RegExp(`^${prefix}/participants/([0-9a-f-]{36})$`));
+      if (req.method === 'PATCH' && participantMatch) {
+        const p = state.participants.get(participantMatch[1]);
+        if (!p) return send(404, { message: 'not found' });
+        if (body.displayName !== undefined) p.displayName = body.displayName;
+        return send(200, p);
       }
       if (req.method === 'POST' && path === `${prefix}/gatherings`) {
         const code = crypto.randomBytes(4).toString('hex').toUpperCase();
@@ -156,6 +164,21 @@ test('login is stable per device and profile', async () => {
   const b = await login('Alice', 'device-0001');
   assert.equal(a.playerId, b.playerId);
   assert.ok(a.playerToken.includes('.'));
+});
+
+test('login renames the participant and keeps profiles apart', async () => {
+  const first = await login('Mopey Elf', 'device-0001');
+  const participant = (id) => [...state.participants.values()].find((p) => p.id === id);
+  assert.equal(participant(first.playerId).displayName, 'Mopey Elf');
+
+  const renamed = await call('POST', '/login', { deviceId: 'device-0001', profile: 'p1', displayName: 'Phillip' });
+  assert.equal(renamed.data.playerId, first.playerId, 'same device and profile stay the same participant');
+  assert.equal(renamed.data.displayName, 'Phillip');
+  assert.equal(participant(first.playerId).displayName, 'Phillip', 'the participant list shows the current name');
+
+  const other = await call('POST', '/login', { deviceId: 'device-0001', profile: 'p2', displayName: 'Phillip' });
+  assert.notEqual(other.data.playerId, first.playerId, 'another profile is another participant');
+  assert.equal(participant(other.data.playerId).externalUserId, 'bossroom:device-0001:p2');
 });
 
 test('rejects missing, forged and expired tokens', async () => {

@@ -120,6 +120,10 @@ namespace Unity.BossRoom.Gameplay.GameState
             m_SessionButton.interactable = false;
             m_SignInSpinner.SetActive(true);
 
+            // the profile is part of the Cortex participant identity, so take its name over before signing in:
+            // the participant list then shows the profile instead of the random name of the previous one
+            m_SessionUIMediator.ResetPlayerName();
+
             var signedIn = await m_AuthServiceFacade.SignInAsync(ClientPrefs.GetGuid(), m_ProfileManager.Profile, m_LocalUser.DisplayName);
             if (!signedIn)
             {

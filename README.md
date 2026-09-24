@@ -165,6 +165,9 @@ build needed — this is the quickest way.
 
   On macOS `open -n` is also what lets you launch the same app twice at all.
 
+  The profile also names the player: picking one takes its name over as the player name, so the Cortex
+  participant list shows `player2` rather than a random one. The dice next to the name still overrides it.
+
 <br>
 
 ## Voice chat

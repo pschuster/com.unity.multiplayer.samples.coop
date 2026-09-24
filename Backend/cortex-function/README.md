@@ -17,7 +17,7 @@ the proxy, so all parameters are part of the path.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/login` | `{deviceId, profile, displayName}` → `{playerId, displayName, playerToken, expiresAt}` |
+| POST | `/login` | `{deviceId, profile, displayName}` → `{playerId, displayName, playerToken, expiresAt}`; the participant is `{GAME_ID}:{deviceId}:{profile}` and is renamed when `displayName` changed |
 | GET  | `/lobbies` | Open, listed lobbies with free slots |
 | POST | `/lobbies` | `{name, isPrivate, maxMembers}`; the caller becomes the owner |
 | POST | `/lobbies/quickjoin` | Joins the newest open lobby, 404 if none |

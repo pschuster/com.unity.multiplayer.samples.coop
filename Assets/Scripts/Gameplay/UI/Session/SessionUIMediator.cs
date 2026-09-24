@@ -6,6 +6,7 @@ using Unity.BossRoom.Infrastructure;
 using Unity.BossRoom.OdinServices.Auth;
 using Unity.BossRoom.OdinServices.Backend;
 using Unity.BossRoom.OdinServices.Sessions;
+using Unity.BossRoom.Utils;
 using UnityEngine;
 using VContainer;
 
@@ -38,6 +39,7 @@ namespace Unity.BossRoom.Gameplay.UI
         LocalSession m_LocalSession;
         NameGenerationData m_NameGenerationData;
         ConnectionManager m_ConnectionManager;
+        ProfileManager m_ProfileManager;
         ISubscriber<ConnectStatus> m_ConnectStatusSubscriber;
 
         const string k_DefaultSessionName = "no-name";
@@ -51,7 +53,8 @@ namespace Unity.BossRoom.Gameplay.UI
             LocalSession localSession,
             NameGenerationData nameGenerationData,
             ISubscriber<ConnectStatus> connectStatusSub,
-            ConnectionManager connectionManager
+            ConnectionManager connectionManager,
+            ProfileManager profileManager
         )
         {
             m_PlayerAuthFacade = playerAuthFacade;
@@ -60,8 +63,9 @@ namespace Unity.BossRoom.Gameplay.UI
             m_GatheringsFacade = gatheringsFacade;
             m_LocalSession = localSession;
             m_ConnectionManager = connectionManager;
+            m_ProfileManager = profileManager;
             m_ConnectStatusSubscriber = connectStatusSub;
-            RegenerateName();
+            ResetPlayerName();
 
             m_ConnectStatusSubscriber.Subscribe(OnConnectStatus);
         }
@@ -234,10 +238,28 @@ namespace Unity.BossRoom.Gameplay.UI
             m_CreateToggleTabBlocker.SetToColor(1);
         }
 
+        /// <summary>
+        /// Names the player after the profile they picked, and rolls a random name while there is none. The name
+        /// travels to Cortex on the next sign-in, so the participant list shows the profile rather than a random name.
+        /// </summary>
+        public void ResetPlayerName()
+        {
+            SetPlayerName(m_ProfileManager.PlayerChosenProfile ?? m_NameGenerationData.GenerateName());
+        }
+
+        /// <summary>
+        /// Hooked up to the dice button next to the name: an explicit roll wins over the profile name until the
+        /// player switches profiles again.
+        /// </summary>
         public void RegenerateName()
         {
-            m_LocalUser.DisplayName = m_NameGenerationData.GenerateName();
-            m_PlayerNameLabel.text = m_LocalUser.DisplayName;
+            SetPlayerName(m_NameGenerationData.GenerateName());
+        }
+
+        void SetPlayerName(string name)
+        {
+            m_LocalUser.DisplayName = name;
+            m_PlayerNameLabel.text = name;
         }
 
         void BlockUIWhileLoadingIsInProgress()

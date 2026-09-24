@@ -194,8 +194,8 @@
       }
     },
     "com.unity.multiplayer.tools": {
-      "version": "2.2.11",
-      "depth": 1,
+      "version": "2.2.12",
+      "depth": 0,
       "source": "registry",
       "dependencies": {
         "com.unity.burst": "1.8.18",

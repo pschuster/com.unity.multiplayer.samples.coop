@@ -221,11 +221,17 @@ async function login(cfg, event) {
     displayName: name,
   });
 
+  // POST only creates or looks up by external user id, so a returning player would keep the name they first
+  // signed in with. Push the current one, otherwise the participant list shows a stale name forever.
+  if (participant.displayName !== name) {
+    await cortex(cfg, 'PATCH', `/participants/${participant.id}`, { displayName: name });
+  }
+
   const ttl = parseInt(process.env.PLAYER_TOKEN_TTL || '86400', 10);
   const expiresAt = Math.floor(Date.now() / 1000) + ttl;
   return json(200, {
     playerId: participant.id,
-    displayName: participant.displayName || name,
+    displayName: name,
     playerToken: signPlayerToken(cfg, { pid: participant.id, name, exp: expiresAt }),
     expiresAt,
   });
