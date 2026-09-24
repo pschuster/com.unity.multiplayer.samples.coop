@@ -103,6 +103,9 @@ namespace Unity.BossRoom.ApplicationLifecycle
             // voice overlay for all scenes; it only shows while connected
             var voiceHud = new GameObject("ODIN Voice HUD").AddComponent<Unity.BossRoom.Gameplay.UI.OdinVoiceHud>();
             Container.Inject(voiceHud);
+            // enforces ODIN Cortex sanctions in the voice room (mutes, bans) and reports them through the HUD
+            var cortexListener = voiceHud.gameObject.AddComponent<Unity.BossRoom.Gameplay.Cortex.CortexRoomListener>();
+            Container.Inject(cortexListener);
 
             Application.wantsToQuit += OnWantToQuit;
             DontDestroyOnLoad(gameObject);

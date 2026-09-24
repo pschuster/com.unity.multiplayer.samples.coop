@@ -17,6 +17,8 @@ namespace Unity.BossRoom.Gameplay.UI
     /// <summary>
     /// Small overlay for ODIN voice while connected: microphone state, who is talking, the party radio push-to-talk key
     /// and, if the backend runs transcription, the latest transcribed lines with moderation flags from ODIN Cortex.
+    /// It also shows moderation notices for the local player (warnings, mutes) that the
+    /// <see cref="Cortex.CortexRoomListener"/> receives from the Cortex bot in the room.
     /// </summary>
     public class OdinVoiceHud : MonoBehaviour
     {
@@ -37,6 +39,15 @@ namespace Unity.BossRoom.Gameplay.UI
         Canvas m_Canvas;
         TextMeshProUGUI m_StatusText;
         TextMeshProUGUI m_TranscriptText;
+        TextMeshProUGUI m_NoticeText;
+        /// <summary>When the current notice disappears; infinity keeps it until it is replaced or cleared.</summary>
+        float m_NoticeHideAt;
+
+        /// <summary>
+        /// Remote peers Cortex muted for this client, set by the <see cref="Cortex.CortexRoomListener"/>, so the
+        /// status can say why someone cannot be heard.
+        /// </summary>
+        public IReadOnlyCollection<uint> ModeratedPeers { get; set; } = Array.Empty<uint>();
         OdinNetcodeVoice m_Voice;
         string m_LastTranscriptTimestamp;
         string m_TranscriptSessionId;
@@ -62,12 +73,40 @@ namespace Unity.BossRoom.Gameplay.UI
             if (!m_Canvas.enabled)
             {
                 ResetTranscript();
+                ClearNotice();
                 return;
             }
 
             HandleInput();
             UpdateStatus();
             PollTranscript();
+            if (m_NoticeText.gameObject.activeSelf && Time.unscaledTime >= m_NoticeHideAt)
+            {
+                ClearNotice();
+            }
+        }
+
+        /// <summary>
+        /// Shows a moderation notice at the top of the screen, replacing the previous one.
+        /// </summary>
+        /// <param name="message">Rich text to show.</param>
+        /// <param name="seconds">How long to show it; 0 or less keeps it until it is replaced or cleared.</param>
+        public void ShowNotice(string message, float seconds)
+        {
+            m_NoticeText.SetText(message);
+            m_NoticeText.gameObject.SetActive(true);
+            m_NoticeHideAt = seconds > 0 ? Time.unscaledTime + seconds : float.PositiveInfinity;
+        }
+
+        /// <summary>
+        /// Removes the moderation notice.
+        /// </summary>
+        public void ClearNotice()
+        {
+            if (m_NoticeText != null)
+            {
+                m_NoticeText.gameObject.SetActive(false);
+            }
         }
 
         void SetVoice(OdinNetcodeVoice voice)
@@ -133,6 +172,23 @@ namespace Unity.BossRoom.Gameplay.UI
                 m_Text.Append("\n<color=#7CFC00>Speaking:</color> ");
                 var first = true;
                 foreach (var peerId in m_TalkingPeers)
+                {
+                    if (!first)
+                    {
+                        m_Text.Append(", ");
+                    }
+
+                    first = false;
+                    m_Text.Append(transport != null && transport.TryGetPeerName(peerId, out var name) ? name : $"Peer {peerId}");
+                }
+            }
+
+            if (ModeratedPeers.Count > 0)
+            {
+                var transport = m_NetworkManager.NetworkConfig.NetworkTransport as OdinNetcodeTransport;
+                m_Text.Append("\n<color=#ff9f43>Muted by moderation:</color> ");
+                var first = true;
+                foreach (var peerId in ModeratedPeers)
                 {
                     if (!first)
                     {
@@ -245,6 +301,8 @@ namespace Unity.BossRoom.Gameplay.UI
             m_StatusText = CreateText("Voice Status", new Vector2(0, 0), new Vector2(24, 24), TextAlignmentOptions.BottomLeft, 24);
             m_TranscriptText = CreateText("Voice Transcript", new Vector2(1, 0), new Vector2(-24, 24), TextAlignmentOptions.BottomRight, 22);
             m_TranscriptText.gameObject.SetActive(false);
+            m_NoticeText = CreateText("Moderation Notice", new Vector2(0.5f, 1), new Vector2(0, -24), TextAlignmentOptions.Top, 26);
+            m_NoticeText.gameObject.SetActive(false);
             m_Canvas.enabled = false;
         }
 

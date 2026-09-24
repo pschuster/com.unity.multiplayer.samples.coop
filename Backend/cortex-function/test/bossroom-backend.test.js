@@ -17,7 +17,9 @@ function signPlayerToken(payload) {
 }
 
 function resetState() {
-  state = { participants: new Map(), gatherings: new Map(), tokens: [], sessions: new Map() };
+  // bans: externalUserId -> active ban; mutedUsers: externalUserIds with an active voice mute;
+  // withoutOdinToken: the project's token provider fails, so the mint returns no odinToken
+  state = { participants: new Map(), gatherings: new Map(), tokens: [], sessions: new Map(), bans: new Map(), mutedUsers: new Set(), withoutOdinToken: false };
 }
 
 function formatCode(code) {
@@ -52,6 +54,10 @@ function startMock() {
         return send(201, p);
       }
       const participantMatch = path.match(new RegExp(`^${prefix}/participants/([0-9a-f-]{36})$`));
+      if (req.method === 'GET' && participantMatch) {
+        const p = state.participants.get(participantMatch[1]);
+        return p ? send(200, p) : send(404, { message: 'not found' });
+      }
       if (req.method === 'PATCH' && participantMatch) {
         const p = state.participants.get(participantMatch[1]);
         if (!p) return send(404, { message: 'not found' });
@@ -112,9 +118,17 @@ function startMock() {
         const del = sub.match(/^\/members\/(.+)$/);
         if (req.method === 'DELETE' && del) { g.members.filter((x) => x.participantId === del[1]).forEach((x) => { x.status = 'left'; }); return send(204); }
       }
-      if (req.method === 'POST' && path === `${prefix}/token`) {
+      // the join gate, as documented in Sanctions#Layer 1: a ban refuses with 403 + the ban, a mute tags the token
+      if (req.method === 'POST' && path === `${prefix}/participants/token`) {
         state.tokens.push(body);
-        return send(200, { token: `token-${body.roomId}-${body.userId}` });
+        const ban = state.bans.get(body.externalUserId);
+        if (ban) return send(403, { statusCode: 403, error: 'Forbidden', message: 'Participant is banned', sanction: ban });
+        const tags = state.mutedUsers.has(body.externalUserId) ? ['cortex:muted'] : [];
+        return send(201, {
+          token: 'participant-jwt',
+          odinToken: state.withoutOdinToken ? null : `odin-${body.roomId}-${body.externalUserId}${tags.length ? '-muted' : ''}`,
+          odinTokenRestrictions: { tags, lifetimeSeconds: 300, applied: true, provider: 'access_key' },
+        });
       }
       if ((m = path.match(new RegExp(`^${prefix}/sessions/([0-9a-f-]{36})/messages$`)))) {
         return send(200, state.sessions.get(m[1]) || []);
@@ -233,7 +247,10 @@ test('tokens only for members, start and leave rules', async () => {
   const token = await call('POST', `/lobbies/${lobby.id}/token`, undefined, client.playerToken);
   assert.equal(token.status, 200);
   assert.equal(token.data.roomId, lobby.roomId);
-  assert.deepEqual(state.tokens.at(-1), { roomId: lobby.roomId, userId: client.playerId });
+  // minted through the join gate, with the external user id the bot and the sanctions know the player by
+  const clientExternalId = state.participants.get(client.playerId).externalUserId;
+  assert.deepEqual(state.tokens.at(-1), { externalUserId: clientExternalId, displayName: 'Client', gatheringId: lobby.id, roomId: lobby.roomId });
+  assert.equal(token.data.token, `odin-${lobby.roomId}-${clientExternalId}`);
 
   assert.equal((await call('POST', `/lobbies/${lobby.id}/start`, undefined, client.playerToken)).status, 403);
   const started = await call('POST', `/lobbies/${lobby.id}/start`, undefined, host.playerToken);
@@ -246,6 +263,53 @@ test('tokens only for members, start and leave rules', async () => {
 
   await call('POST', `/lobbies/${lobby.id}/leave`, undefined, host.playerToken);
   assert.equal(state.gatherings.get(lobby.id).status, 'ended', 'lobby ends with its host');
+});
+
+test('a banned player gets a readable 403 instead of a voice token', async () => {
+  const host = await login('Host');
+  const lobby = (await call('POST', '/lobbies', { name: 'Run', isPrivate: false }, host.playerToken)).data;
+  const hostExternalId = state.participants.get(host.playerId).externalUserId;
+  state.bans.set(hostExternalId, { id: 'ban-1', type: 'temp_ban', reason: 'Harassment', endAt: '2026-09-24T14:00:00.000Z', status: 'active' });
+
+  const refused = await call('POST', `/lobbies/${lobby.id}/token`, undefined, host.playerToken);
+  assert.equal(refused.status, 403);
+  assert.equal(refused.data.error, 'banned');
+  assert.equal(refused.data.message, 'You are banned until Thu, 24 Sep 2026 14:00 UTC (Harassment).');
+  assert.deepEqual(refused.data.sanction, { type: 'temp_ban', reason: 'Harassment', endAt: '2026-09-24T14:00:00.000Z' });
+
+  state.bans.set(hostExternalId, { id: 'ban-2', type: 'perm_ban', reason: null, endAt: null, status: 'active' });
+  const permanent = await call('POST', `/lobbies/${lobby.id}/token`, undefined, host.playerToken);
+  assert.equal(permanent.data.message, 'You are banned permanently.');
+});
+
+test('a muted player still gets a token, tagged by Cortex', async () => {
+  const host = await login('Host');
+  const lobby = (await call('POST', '/lobbies', { name: 'Run', isPrivate: false }, host.playerToken)).data;
+  state.mutedUsers.add(state.participants.get(host.playerId).externalUserId);
+
+  const token = await call('POST', `/lobbies/${lobby.id}/token`, undefined, host.playerToken);
+  assert.equal(token.status, 200);
+  assert.match(token.data.token, /-muted$/);
+});
+
+test('player tokens from before the external id resolve it through the participant', async () => {
+  const host = await login('Host');
+  const lobby = (await call('POST', '/lobbies', { name: 'Run', isPrivate: false }, host.playerToken)).data;
+  const legacy = signPlayerToken({ pid: host.playerId, name: 'Host', exp: Math.floor(Date.now() / 1000) + 600 });
+
+  const token = await call('POST', `/lobbies/${lobby.id}/token`, undefined, legacy);
+  assert.equal(token.status, 200);
+  assert.equal(state.tokens.at(-1).externalUserId, state.participants.get(host.playerId).externalUserId);
+});
+
+test('reports a missing voice token instead of handing out nothing', async () => {
+  const host = await login('Host');
+  const lobby = (await call('POST', '/lobbies', { name: 'Run', isPrivate: false }, host.playerToken)).data;
+  state.withoutOdinToken = true;
+
+  const token = await call('POST', `/lobbies/${lobby.id}/token`, undefined, host.playerToken);
+  assert.equal(token.status, 502);
+  assert.equal(token.data.error, 'no_voice_token');
 });
 
 test('transcript returns new messages with moderation flags', async () => {

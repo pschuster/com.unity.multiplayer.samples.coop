@@ -3,13 +3,14 @@
 // It replaces Unity Authentication and Multiplayer Services (sessions) in the Boss Room sample:
 //   - players log in with a device id and get a short-lived player token
 //   - lobbies are Cortex gatherings of type "lobby"
-//   - ODIN room tokens are only issued to gathering members
+//   - ODIN room tokens are only issued to gathering members, through the Cortex join gate: a banned
+//     player gets a 403 "banned" with the ban, a muted player's token is tagged cortex:muted
 //   - transcripts of the gathering's voice session are relayed to the game
 //
 // Required env vars (names must not start with CORTEX_, which Cortex reserves for itself - it
 // removes CORTEX_API_URL and CORTEX_PROJECT_SECRET from the environment before this code runs):
 //   BOSSROOM_API_URL     e.g. https://cortex.odin.4players.io
-//   BOSSROOM_API_KEY     project scoped key with scopes: sessions, messages, plugins
+//   BOSSROOM_API_KEY     project scoped key with scopes: sessions, messages, plugins, gatherings, participants.token
 //   PLAYER_TOKEN_SECRET  random string (32+ chars) used to sign player tokens
 // Optional env vars:
 //   GAME_ID              default "bossroom", separates games sharing a project
@@ -29,11 +30,16 @@ const MAX_MEMBERS_LIMIT = 8;
 class HttpError extends Error {
   statusCode = 500;
   code = 'internal_error';
+  /** Extra fields for the response body next to `error` and `message`, e.g. the ban of a refused join */
+  details = undefined;
+  /** The parsed body of a failed Cortex call, so a handler can inspect why Cortex refused */
+  cortexBody = undefined;
 
-  constructor(statusCode, code, message) {
+  constructor(statusCode, code, message, details) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -124,7 +130,9 @@ async function cortex(cfg, method, path, body) {
   if (!response.ok) {
     const message = (data && (Array.isArray(data.message) ? data.message.join(', ') : data.message)) || response.statusText;
     const code = response.status === 404 ? 'not_found' : response.status === 403 ? 'forbidden' : 'cortex_error';
-    throw new HttpError(response.status >= 500 ? 502 : response.status, code, message);
+    const error = new HttpError(response.status >= 500 ? 502 : response.status, code, message);
+    error.cortexBody = data;
+    throw error;
   }
   return data;
 }
@@ -216,10 +224,8 @@ async function login(cfg, event) {
   const profileName = typeof profile === 'string' && profile.length > 0 ? profile.slice(0, 64) : 'default';
   const name = typeof displayName === 'string' && displayName.trim().length > 0 ? displayName.trim().slice(0, 32) : 'Player';
 
-  const participant = await cortex(cfg, 'POST', '/participants', {
-    externalUserId: `${GAME_ID}:${deviceId}:${profileName}`,
-    displayName: name,
-  });
+  const externalUserId = `${GAME_ID}:${deviceId}:${profileName}`;
+  const participant = await cortex(cfg, 'POST', '/participants', { externalUserId, displayName: name });
 
   // POST only creates or looks up by external user id, so a returning player would keep the name they first
   // signed in with. Push the current one, otherwise the participant list shows a stale name forever.
@@ -232,7 +238,8 @@ async function login(cfg, event) {
   return json(200, {
     playerId: participant.id,
     displayName: name,
-    playerToken: signPlayerToken(cfg, { pid: participant.id, name, exp: expiresAt }),
+    // `ext` is what Cortex knows the player by (sanctions, the join gate, the ODIN user id of their peer)
+    playerToken: signPlayerToken(cfg, { pid: participant.id, ext: externalUserId, name, exp: expiresAt }),
     expiresAt,
   });
 }
@@ -324,13 +331,52 @@ async function kickPlayer(cfg, event, player, gatheringId) {
   return json(200, { removed: true });
 }
 
+/**
+ * Describes a ban for the player, e.g. "You are banned until 24 Sep 2026, 14:00 UTC (Auto-sanctioned …)".
+ * @param {*} sanction the ban as Cortex returns it
+ */
+function describeBan(sanction) {
+  const until = sanction.endAt
+    ? `until ${new Date(sanction.endAt).toUTCString().replace(':00 GMT', ' UTC')}`
+    : 'permanently';
+  return `You are banned ${until}${sanction.reason ? ` (${sanction.reason})` : ''}.`;
+}
+
+/**
+ * The ODIN room token for a lobby member, minted through the Cortex join gate
+ * (`POST /participants/token`) rather than the plain `/token` route, which is not gated:
+ *   - an active temp_ban/perm_ban refuses the token: 403 "banned" with the ban, so the game can show it
+ *   - an active voice mute tags the token `cortex:muted`, so every client masks the peer on join
+ *   - the ODIN user id is the player's external user id, which is how the transcription bot and the
+ *     sanctions know the player (the participant UUID would make the bot create a second participant)
+ */
 async function roomToken(cfg, player, gatheringId) {
   const gathering = await getGathering(cfg, gatheringId);
   assertOpen(gathering);
   if (!activeMember(gathering, player.pid)) throw new HttpError(403, 'not_a_member', 'Join the lobby before requesting a voice token');
 
-  const { token } = await cortex(cfg, 'POST', '/token', { roomId: gathering.roomId, userId: player.pid });
-  return json(200, { roomId: gathering.roomId, token });
+  // player tokens issued before `ext` existed only carry the participant id
+  const externalUserId = player.ext || (await cortex(cfg, 'GET', `/participants/${player.pid}`, undefined)).externalUserId;
+
+  let issued;
+  try {
+    issued = await cortex(cfg, 'POST', '/participants/token', {
+      externalUserId,
+      displayName: player.name,
+      gatheringId: gathering.id,
+      roomId: gathering.roomId,
+    });
+  } catch (error) {
+    const sanction = error instanceof HttpError && error.statusCode === 403 && error.cortexBody && error.cortexBody.sanction;
+    if (!sanction) throw error;
+    throw new HttpError(403, 'banned', describeBan(sanction), {
+      sanction: { type: sanction.type, reason: sanction.reason || null, endAt: sanction.endAt || null },
+    });
+  }
+
+  // odinToken is only missing when the project's token provider failed; without it there is nothing to join with
+  if (!issued.odinToken) throw new HttpError(502, 'no_voice_token', 'Cortex could not issue a voice token for this room');
+  return json(200, { roomId: gathering.roomId, token: issued.odinToken });
 }
 
 async function startGame(cfg, player, gatheringId) {
@@ -423,7 +469,7 @@ exports.handler = async (event) => {
     const player = route.auth === false ? null : verifyPlayerToken(cfg, event);
     return await route.run({ cfg, event, player, match: path.match(route.pattern) });
   } catch (error) {
-    if (error instanceof HttpError) return json(error.statusCode, { error: error.code, message: error.message });
+    if (error instanceof HttpError) return json(error.statusCode, { error: error.code, message: error.message, ...error.details });
     console.error('[bossroom-backend]', error);
     return json(500, { error: 'internal_error', message: 'Unexpected error' });
   }

@@ -88,6 +88,8 @@ namespace Unity.BossRoom.OdinServices.Backend
         public bool IsNotFound => StatusCode == 404;
         public bool IsForbidden => StatusCode == 403;
         public bool IsUnauthorized => StatusCode == 401;
+        /// <summary>The Cortex join gate refused a voice token because the player is banned; the message says until when.</summary>
+        public bool IsBanned => StatusCode == 403 && ErrorCode == "banned";
 
         public BackendException(long statusCode, string errorCode, string message)
             : base(message)

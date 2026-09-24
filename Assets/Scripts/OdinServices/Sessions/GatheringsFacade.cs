@@ -153,6 +153,13 @@ namespace Unity.BossRoom.OdinServices.Sessions
                 CurrentRoomToken = token.token;
                 return (true, true);
             }
+            catch (BackendException e) when (e.IsBanned)
+            {
+                // the Cortex join gate refused the token: say why instead of quietly dropping the lobby
+                PublishError("Reconnecting", e);
+                ResetLobby();
+                return (false, false);
+            }
             catch (BackendException e) when (!e.IsNetworkError && e.StatusCode < 500)
             {
                 Debug.Log($"Lobby is no longer available: {e.Message}");

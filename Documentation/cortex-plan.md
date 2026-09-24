@@ -322,6 +322,14 @@ Client-Infrastruktur braucht. Phase 4 nur vorziehen, wenn ein Kunde Push *vor* d
 
 ### Was sich im Boss-Room-Sample ändert
 
+> **Stand 2026-09-23 — Sanktionsdurchsetzung umgesetzt (Phase 3, Schichten 1–2):**
+> - **Backend-Function:** Raum-Token über `POST /participants/token`, also durch das Join-Gate. Ein Ban liefert `403 banned` mit lesbarer Meldung; Mutes bekommen den Tag `cortex:muted`. Die ODIN-User-ID ist jetzt die `externalUserId` statt der Participant-UUID; vorher legte der Bot pro Spieler einen zweiten Participant an. Der Key braucht zusätzlich die Scopes `gatherings` und `participants.token`.
+> - **Unity:**
+>   - `CortexRoomListener` findet den Bot-Peer, maskiert gemutete Peers per `SetListenChannelMaskForPeer(None)` und wertet `cortex:muted` beim Join aus.
+>   - Warnung und Mute erscheinen als HUD-Hinweis, ein Ban verlässt das Spiel.
+>   - Parser und Mute-Set liegen in `CortexRoomProtocol`, getestet in `CortexRoomProtocolTests`.
+>   - SDK-Pin auf odin-sdk-unity#2 (`b9c25468`).
+> - **Offen:** Transcript-Push statt Polling (`cortex.transcript`) sowie Phase 1/2 im Sample (Cursor, `/client/v1`, HMAC-Tokens ablösen).
 
 - Nach Deploy-Check: `/transcript/{afterTimestamp}` → `?after=`, `Content-Type: text/plain`-Workaround raus.
 - Nach Phase 1: `transcript()` nutzt `after=<seq>&include=annotations`, kein In-Memory-Filtern mehr.

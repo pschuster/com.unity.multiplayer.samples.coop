@@ -26,7 +26,7 @@ the proxy, so all parameters are part of the path.
 | POST | `/lobbies/{id}/join` | Join a listed lobby |
 | POST | `/lobbies/{id}/leave` | Leave; the lobby ends when the owner leaves |
 | POST | `/lobbies/{id}/kick` | `{playerId}`, owner only |
-| POST | `/lobbies/{id}/token` | ODIN room token for the lobby's room (members only) |
+| POST | `/lobbies/{id}/token` | ODIN room token for the lobby's room (members only), minted through the Cortex join gate: `403 {error: "banned", message, sanction}` for a banned player, a `cortex:muted` tag for a muted one |
 | POST | `/lobbies/{id}/start` | Owner only; starts the transcription session if enabled |
 | POST | `/lobbies/{id}/end` | Owner only |
 | GET  | `/lobbies/{id}/transcript[/{afterTimestamp}]` | Transcribed messages with profanity flags |
@@ -36,9 +36,12 @@ The event handler `onGatheringMemberLeft` ends a lobby when its owner is removed
 ## Deploy
 
 1. In the ODIN Cortex dashboard, open your project and activate serverless functions.
-2. Make sure the project's app settings can issue ODIN tokens (access key or rooms token provider). The Cortex
-   bot and the game must use the same ODIN app.
-3. Create an API key scoped to the project with the scopes `sessions`, `messages` and `plugins`.
+2. Make sure the project's app settings can issue ODIN tokens. The Cortex bot and the game must use the same
+   ODIN app. Use the **access key** token provider for sanction enforcement: only tokens Cortex signs itself carry
+   the `cortex:bot` and `cortex:muted` tags (with the rooms provider, bans still work, the game identifies the bot
+   by its user id and muted players are masked once the bot announces them).
+3. Create an API key scoped to the project with the scopes `sessions`, `messages`, `plugins`, `gatherings` and
+   `participants.token` (the last one mints the voice tokens through the join gate).
 4. Create a function:
    * slug: `bossroom-backend`, runtime `nodejs20`, auth mode `public`
    * code: the contents of `bossroom-backend.js`
@@ -57,10 +60,31 @@ The event handler `onGatheringMemberLeft` ends a lobby when its owner is removed
    > before project dependencies, and the npm package of that name is a deprecated placeholder. The function
    > binds it as `nodeCrypto`, because `crypto` is also the name of the global WebCrypto object.
 6. For moderation flags, enable the profanity filter plugin in the project.
+
+   To enforce sanctions in the game (see *Sanctions* below), also enable **`sanctionPush`** in the project's app
+   settings, and optionally the auto-sanction plugin with an escalation ladder, e.g.
+   `["warn:1", "mute:5", "mute:30", "temp_ban:1440"]`.
 7. In Unity, set **Backend Url** in `Assets/Resources/OdinSampleConfig.asset` to
    `https://cortex.odin.4players.io/invoke/<projectId>/bossroom-backend`.
 8. Open that URL in a browser: the function answers with its name, the configured game and its
    routes. That confirms deployment, environment and project id in one request.
+
+## Sanctions
+
+Cortex enforces sanctions in two layers, and the sample implements the client side of both:
+
+* **Join gate.** `/lobbies/{id}/token` asks Cortex for the voice token with `POST /participants/token`. A player
+  with an active `temp_ban`/`perm_ban` gets `403 banned` with a readable message ("You are banned until …"), which
+  the game shows when entering a lobby or reconnecting. A muted player's token carries the tag `cortex:muted`.
+  The ODIN user id of the token is the player's external user id (`{GAME_ID}:{deviceId}:{profile}`), which is also
+  how the transcription bot and the sanctions know the player.
+* **In the room** (needs `TRANSCRIPTION=true`, so the Cortex bot is in the room, and `sanctionPush`).
+  `CortexRoomListener` (`Assets/Scripts/Gameplay/Cortex`) listens to the bot's frames. It stops this client from
+  hearing muted players by setting their listen channel mask to none, so the ODIN server stops delivering their
+  audio. It shows warnings and mutes to the affected player, and leaves the game on a ban. The protocol parsing
+  lives in `Assets/Scripts/OdinServices/Cortex/CortexRoomProtocol.cs` and is covered by `CortexRoomProtocolTests`.
+
+This needs an ODIN Unity SDK that raises `MessageReceived` (odin-sdk-unity#2, pinned in `Packages/manifest.json`).
 
 ## Local development without a backend
 
