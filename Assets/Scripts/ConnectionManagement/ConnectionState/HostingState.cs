@@ -1,6 +1,6 @@
 using System;
 using Unity.BossRoom.Infrastructure;
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices.Sessions;
 using Unity.Multiplayer.Samples.BossRoom;
 using Unity.Multiplayer.Samples.Utilities;
 using Unity.Netcode;
@@ -16,7 +16,7 @@ namespace Unity.BossRoom.ConnectionManagement
     class HostingState : OnlineState
     {
         [Inject]
-        MultiplayerServicesFacade m_MultiplayerServicesFacade;
+        GatheringsFacade m_GatheringsFacade;
         [Inject]
         IPublisher<ConnectionEventMessage> m_ConnectionEventPublisher;
 
@@ -29,10 +29,7 @@ namespace Unity.BossRoom.ConnectionManagement
             //may do this differently.
             SceneLoaderWrapper.Instance.LoadScene("CharSelect", useNetworkSceneManager: true);
 
-            if (m_MultiplayerServicesFacade.CurrentUnitySession != null)
-            {
-                m_MultiplayerServicesFacade.BeginTracking();
-            }
+            m_GatheringsFacade.BeginTracking();
         }
 
         public override void Exit()
@@ -139,10 +136,7 @@ namespace Unity.BossRoom.ConnectionManagement
 
             response.Approved = false;
             response.Reason = JsonUtility.ToJson(gameReturnStatus);
-            if (m_MultiplayerServicesFacade.CurrentUnitySession != null)
-            {
-                m_MultiplayerServicesFacade.RemovePlayerFromSessionAsync(connectionPayload.playerId);
-            }
+            m_GatheringsFacade.RemovePlayerFromLobbyAsync(connectionPayload.playerId);
         }
 
         ConnectStatus GetConnectStatus(ConnectionPayload connectionPayload)

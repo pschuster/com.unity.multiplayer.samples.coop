@@ -18,6 +18,8 @@ namespace Unity.Netcode.Samples.BossRoom
         /// </summary>
         const string k_DefaultFileName = "TutorialCallbacks";
 
+        const string k_OdinConfigPath = "Assets/Resources/OdinSampleConfig.asset";
+
         /// <summary>
         /// Creates a TutorialCallbacks asset and shows it in the Project window.
         /// </summary>
@@ -40,14 +42,26 @@ namespace Unity.Netcode.Samples.BossRoom
             Unity.Tutorials.Editor.TutorialWindow.StartTutorial(tutorial);
         }
 
-        public bool IsConnectedToUgs()
+        /// <summary>
+        /// True once ODIN has either a backend URL or a development access key configured.
+        /// </summary>
+        public bool IsOdinConfigured()
         {
-            return CloudProjectSettings.projectBound;
+            var config = AssetDatabase.LoadAssetAtPath<Unity.BossRoom.OdinServices.Backend.OdinSampleConfig>(k_OdinConfigPath);
+            return config != null && config.IsConfigured;
         }
 
-        public void ShowServicesSettings()
+        public void ShowOdinConfig()
         {
-            SettingsService.OpenProjectSettings("Project/Services");
+            var config = AssetDatabase.LoadAssetAtPath<Unity.BossRoom.OdinServices.Backend.OdinSampleConfig>(k_OdinConfigPath);
+            if (config == null)
+            {
+                Debug.LogWarning($"{k_OdinConfigPath} not found. Create it with Assets > Create > Boss Room > ODIN Sample Config.");
+                return;
+            }
+
+            Selection.activeObject = config;
+            EditorGUIUtility.PingObject(config);
         }
 
         public void OpenURL(string url)

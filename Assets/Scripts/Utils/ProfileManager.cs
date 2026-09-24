@@ -16,6 +16,7 @@ namespace Unity.BossRoom.Utils
         public const string AuthProfileCommandLineArg = "-AuthProfile";
 
         string m_Profile;
+        bool m_ProfileIsPlayerChosen;
 
         public string Profile
         {
@@ -23,7 +24,7 @@ namespace Unity.BossRoom.Utils
             {
                 if (m_Profile == null)
                 {
-                    m_Profile = GetProfile();
+                    m_Profile = GetProfile(out m_ProfileIsPlayerChosen);
                 }
 
                 return m_Profile;
@@ -31,7 +32,21 @@ namespace Unity.BossRoom.Utils
             set
             {
                 m_Profile = value;
+                m_ProfileIsPlayerChosen = true;
                 onProfileChanged?.Invoke();
+            }
+        }
+
+        /// <summary>
+        /// The profile when the player named it themselves, otherwise null. The fallback profile is a hash of the
+        /// project path or an empty string, so only a chosen one is worth showing as a player name.
+        /// </summary>
+        public string PlayerChosenProfile
+        {
+            get
+            {
+                var profile = Profile; // reading it resolves the fallback, and with it m_ProfileIsPlayerChosen
+                return m_ProfileIsPlayerChosen ? profile : null;
             }
         }
 
@@ -64,7 +79,7 @@ namespace Unity.BossRoom.Utils
             SaveProfiles();
         }
 
-        static string GetProfile()
+        static string GetProfile(out bool playerChosen)
         {
             var arguments = Environment.GetCommandLineArgs();
             for (int i = 0; i < arguments.Length; i++)
@@ -72,9 +87,13 @@ namespace Unity.BossRoom.Utils
                 if (arguments[i] == AuthProfileCommandLineArg)
                 {
                     var profileId = arguments[i + 1];
+                    // whoever passed the argument picked the name, so it can stand in for a player name
+                    playerChosen = true;
                     return profileId;
                 }
             }
+
+            playerChosen = false;
 
 #if UNITY_EDITOR
 

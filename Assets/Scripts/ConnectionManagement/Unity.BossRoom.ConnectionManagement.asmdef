@@ -4,14 +4,11 @@
     "references": [
         "Unity.Netcode.Runtime",
         "Unity.Multiplayer.Samples.Utilities",
-        "Unity.BossRoom.UnityServices",
+        "Unity.BossRoom.OdinServices",
         "Unity.BossRoom.Infrastructure",
-        "Unity.Services.Core",
-        "Unity.Services.Authentication",
         "Unity.BossRoom.Utils",
-        "Unity.Networking.Transport",
         "VContainer",
-        "Unity.Services.Multiplayer"
+        "Odin.Netcode"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

@@ -61,12 +61,9 @@ namespace Unity.BossRoom.ConnectionManagement
             {
                 m_ConnectionMethod.SetupClientConnection();
 
-                if (m_ConnectionMethod is ConnectionMethodIP)
+                if (!m_ConnectionManager.NetworkManager.StartClient())
                 {
-                    if (!m_ConnectionManager.NetworkManager.StartClient())
-                    {
-                        throw new Exception("NetworkManager StartClient failed");
-                    }
+                    throw new Exception("NetworkManager StartClient failed");
                 }
             }
             catch (Exception e)

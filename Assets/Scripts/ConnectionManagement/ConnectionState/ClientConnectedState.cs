@@ -1,4 +1,4 @@
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices.Sessions;
 using UnityEngine;
 using VContainer;
 
@@ -11,14 +11,11 @@ namespace Unity.BossRoom.ConnectionManagement
     class ClientConnectedState : OnlineState
     {
         [Inject]
-        protected MultiplayerServicesFacade m_MultiplayerServicesFacade;
+        protected GatheringsFacade m_GatheringsFacade;
 
         public override void Enter()
         {
-            if (m_MultiplayerServicesFacade.CurrentUnitySession != null)
-            {
-                m_MultiplayerServicesFacade.BeginTracking();
-            }
+            m_GatheringsFacade.BeginTracking();
         }
 
         public override void Exit() { }

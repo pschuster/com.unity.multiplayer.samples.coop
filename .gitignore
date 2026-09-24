@@ -86,3 +86,13 @@ InitCodeMarker
 .idea/**/usage.statistics.xml
 .idea/**/dictionaries
 .idea/**/shelf
+
+# Standalone player builds next to the project (macOS bundles are directories)
+*.app/
+*.exe
+
+# Auto-generated solution file of the new project format
+*.slnx
+
+# Visual Studio Code
+.vscode/

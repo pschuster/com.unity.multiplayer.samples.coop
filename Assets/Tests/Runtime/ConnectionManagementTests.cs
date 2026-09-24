@@ -4,8 +4,11 @@ using System.Collections.Generic;
 using NUnit.Framework;
 using Unity.BossRoom.ConnectionManagement;
 using Unity.BossRoom.Infrastructure;
-using Unity.BossRoom.UnityServices;
-using Unity.BossRoom.UnityServices.Sessions;
+using System.Threading.Tasks;
+using Unity.BossRoom.OdinServices;
+using Unity.BossRoom.OdinServices.Auth;
+using Unity.BossRoom.OdinServices.Backend;
+using Unity.BossRoom.OdinServices.Sessions;
 using Unity.BossRoom.Utils;
 using Unity.Multiplayer.Samples.Utilities;
 using Unity.Netcode;
@@ -38,14 +41,32 @@ namespace Unity.BossRoom.Tests.Runtime
                 builder.RegisterComponent(UpdateRunner);
                 builder.RegisterComponent(new NetworkedMessageChannel<ConnectionEventMessage>()).AsImplementedInterfaces();
                 builder.RegisterInstance(new BufferedMessageChannel<ConnectStatus>()).AsImplementedInterfaces();
-                builder.RegisterInstance(new MessageChannel<UnityServiceErrorMessage>()).AsImplementedInterfaces();
+                builder.RegisterInstance(new MessageChannel<ServiceErrorMessage>()).AsImplementedInterfaces();
                 builder.RegisterInstance(new MessageChannel<ReconnectMessage>()).AsImplementedInterfaces();
                 builder.RegisterInstance(new BufferedMessageChannel<SessionListFetchedMessage>()).AsImplementedInterfaces();
                 builder.Register<LocalSession>(Lifetime.Singleton);
                 builder.Register<LocalSessionUser>(Lifetime.Singleton);
                 builder.Register<ProfileManager>(Lifetime.Singleton);
-                builder.RegisterEntryPoint<MultiplayerServicesFacade>(Lifetime.Singleton).AsSelf();
+                builder.RegisterInstance(ScriptableObject.CreateInstance<OdinSampleConfig>());
+                builder.Register<ILobbyBackend, LocalLobbyBackend>(Lifetime.Singleton);
+                builder.Register<PlayerAuthFacade>(Lifetime.Singleton);
+                builder.Register<GatheringsFacade>(Lifetime.Singleton);
             }
+        }
+
+        /// <summary>
+        /// Uses the transport the integration test framework configured, so the connection states can be tested without ODIN.
+        /// </summary>
+        class TestConnectionMethod : ConnectionMethodBase
+        {
+            public TestConnectionMethod(ConnectionManager connectionManager, LifetimeScope scope, string playerName)
+                : base(connectionManager, ClientPrefs.GetGuid() + scope.Container.Resolve<ProfileManager>().Profile, playerName) { }
+
+            public override void SetupHostConnection() => SetConnectionPayload();
+
+            public override void SetupClientConnection() => SetConnectionPayload();
+
+            public override Task<(bool success, bool shouldTryAgain)> SetupClientReconnectionAsync() => Task.FromResult((true, true));
         }
 
         class SceneLoaderWrapperStub : SceneLoaderWrapper
@@ -160,14 +181,14 @@ namespace Unity.BossRoom.Tests.Runtime
 
         void StartHost()
         {
-            m_ServerConnectionManager.StartHostIp("server", "127.0.0.1", 9998);
+            m_ServerConnectionManager.StartHost(new TestConnectionMethod(m_ServerConnectionManager, m_ServerScope, "server"));
         }
 
         IEnumerator ConnectClients()
         {
             for (var i = 0; i < NumberOfClients; i++)
             {
-                m_ClientConnectionManagers[i].StartClientIp($"client{i}", "127.0.0.1", 9998);
+                m_ClientConnectionManagers[i].StartClient(new TestConnectionMethod(m_ClientConnectionManagers[i], m_ClientScopes[i], $"client{i}"));
             }
 
             yield return WaitForClientsConnectedOrTimeOut(m_ClientNetworkManagers);
@@ -489,7 +510,7 @@ namespace Unity.BossRoom.Tests.Runtime
 
             for (var i = 0; i < NumberOfClients; i++)
             {
-                m_ClientConnectionManagers[i].StartClientIp($"client{i}", "127.0.0.1", 9998);
+                m_ClientConnectionManagers[i].StartClient(new TestConnectionMethod(m_ClientConnectionManagers[i], m_ClientScopes[i], $"client{i}"));
             }
 
             m_ClientConnectionManagers[0].RequestShutdown();
@@ -511,7 +532,7 @@ namespace Unity.BossRoom.Tests.Runtime
 
             for (var i = 0; i < NumberOfClients; i++)
             {
-                m_ClientConnectionManagers[i].StartClientIp($"client{i}", "127.0.0.1", 9998);
+                m_ClientConnectionManagers[i].StartClient(new TestConnectionMethod(m_ClientConnectionManagers[i], m_ClientScopes[i], $"client{i}"));
             }
 
             m_ClientConnectionManagers[0].RequestShutdown();

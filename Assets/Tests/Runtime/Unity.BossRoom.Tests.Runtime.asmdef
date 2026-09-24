@@ -9,12 +9,14 @@
         "Unity.BossRoom.ConnectionManagement",
         "Unity.BossRoom.Gameplay",
         "Unity.BossRoom.Infrastructure",
-        "Unity.BossRoom.UnityServices",
         "Unity.BossRoom.Utils",
         "Unity.Netcode.Runtime",
         "VContainer",
         "Unity.Collections",
-        "Unity.Netcode.Runtime.Tests"
+        "Unity.Netcode.Runtime.Tests",
+        "Unity.BossRoom.OdinServices",
+        "odinsdk",
+        "Odin.Netcode"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

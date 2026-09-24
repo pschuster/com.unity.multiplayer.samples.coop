@@ -1,13 +1,12 @@
-using System;
 using TMPro;
-using Unity.Services.Multiplayer;
+using Unity.BossRoom.OdinServices.Backend;
 using UnityEngine;
 using VContainer;
 
 namespace Unity.BossRoom.Gameplay.UI
 {
     /// <summary>
-    /// An individual Session UI in the list of available Sessions.
+    /// An individual lobby in the list of available lobbies.
     /// </summary>
     public class SessionListItemUI : MonoBehaviour
     {
@@ -19,13 +18,13 @@ namespace Unity.BossRoom.Gameplay.UI
         [Inject]
         SessionUIMediator m_SessionUIMediator;
 
-        ISessionInfo m_Data;
+        LobbyInfo m_Data;
 
-        public void SetData(ISessionInfo data)
+        public void SetData(LobbyInfo data)
         {
             m_Data = data;
-            m_SessionNameText.SetText(data.Name);
-            m_SessionCountText.SetText($"{data.MaxPlayers - data.AvailableSlots}/{data.MaxPlayers}");
+            m_SessionNameText.SetText(data.name);
+            m_SessionCountText.SetText($"{data.memberCount}/{data.maxMembers}");
         }
 
         public void OnClick()

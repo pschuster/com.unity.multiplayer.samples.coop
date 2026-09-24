@@ -3,6 +3,9 @@ using System.Collections;
 using Unity.BossRoom.Gameplay.GameState;
 using Unity.BossRoom.Gameplay.UI;
 using NUnit.Framework;
+using OdinNative.Wrapper;
+using Unity.BossRoom.OdinServices.Auth;
+using Unity.BossRoom.OdinServices.Backend;
 using Unity.Multiplayer.Samples.Utilities;
 using Unity.Netcode;
 using UnityEngine;
@@ -105,13 +108,28 @@ namespace Unity.BossRoom.Tests.Runtime
             yield return new TestUtilities.WaitForSceneLoad(k_MainMenuSceneName);
         }
 
+        [UnitySetUp]
+        public IEnumerator UseLocalDevelopmentMode()
+        {
+            // no backend needed: lobbies run in local development mode with a generated test access key
+            OdinSampleConfig.RuntimeOverride = OdinSampleConfig.CreateForLocalDevelopment(OdinClient.CreateAccessKey());
+            yield break;
+        }
+
+        /// <remarks>
+        /// Known issue since the upgrade to Unity 6000.6 / Netcode 2.13: when this test loads the Startup scene at
+        /// runtime, Netcode does not spawn its in-scene NetworkObjects ("Detected a pre-instantiated GameObject with a
+        /// NetworkObject component instance that is not a registered prefab nor an in-scene placed NetworkObject").
+        /// Because the SceneLoader is then not spawned, CharSelect never loads and this test fails. The same happens on
+        /// the unmodified Unity sample with its direct IP flow, so it is unrelated to ODIN.
+        /// </remarks>
         /// <summary>
         /// Smoke test to validating hosting inside Boss Room. The test will load the project's bootstrap scene,
-        /// Startup, and commence the game IP flow as a host, pick and confirm a parametrized character, and jump into
-        /// the BossRoom scene, where the test will disconnect the host.
+        /// Startup, create a lobby as a host (ODIN local development mode), pick and confirm a parametrized character,
+        /// and jump into the BossRoom scene, where the test will disconnect the host.
         /// </summary>
         [UnityTest]
-        public IEnumerator IP_HostAndDisconnect_Valid([ValueSource(nameof(s_PlayerIndices))] int playerIndex)
+        public IEnumerator Odin_HostAndDisconnect_Valid([ValueSource(nameof(s_PlayerIndices))] int playerIndex)
         {
             yield return WaitUntilMainMenuSceneIsLoaded();
 
@@ -120,23 +138,21 @@ namespace Unity.BossRoom.Tests.Runtime
             Assert.That(clientMainMenuState != null, $"{nameof(clientMainMenuState)} component not found!");
 
             var container = clientMainMenuState.Container;
-            var ipUIMediator = container.Resolve<IPUIMediator>();
+            var authFacade = container.Resolve<PlayerAuthFacade>();
+            var sessionUIMediator = container.Resolve<SessionUIMediator>();
 
-            Assert.That(ipUIMediator != null, $"{nameof(IPUIMediator)} component not found!");
+            Assert.That(sessionUIMediator != null, $"{nameof(SessionUIMediator)} component not found!");
 
-            var ipHostingUI = ipUIMediator.IPHostingUI;
-            Assert.That(ipHostingUI != null, $"{nameof(IPHostingUI)} component not found!");
+            var signInTimeout = Time.realtimeSinceStartup + 10f;
+            yield return new WaitUntil(() => authFacade.IsSignedIn || Time.realtimeSinceStartup > signInTimeout);
+            Assert.That(authFacade.IsSignedIn, "Player did not sign in");
 
-            // select "DIRECT IP" button
-            clientMainMenuState.OnDirectIPClicked();
+            // create a private lobby, which starts hosting once the room token is available
+            clientMainMenuState.OnStartClicked();
+            sessionUIMediator.CreateSessionRequest("test", true);
 
-            yield return null;
-
-            // select the "HOST" button
-            ipHostingUI.OnCreateClick();
-
-            // confirming hosting will initialize the hosting process; next frame the results will be ready
-            yield return null;
+            var hostTimeout = Time.realtimeSinceStartup + 10f;
+            yield return new WaitUntil(() => m_NetworkManager.IsListening || Time.realtimeSinceStartup > hostTimeout);
 
             // verify hosting is successful
             Assert.That(m_NetworkManager.IsListening && m_NetworkManager.IsHost);
@@ -157,6 +173,8 @@ namespace Unity.BossRoom.Tests.Runtime
         [UnityTearDown]
         public IEnumerator DestroySceneGameObjects()
         {
+            OdinSampleConfig.RuntimeOverride = null;
+
             foreach (var sceneGameObject in Object.FindObjectsByType<GameObject>(FindObjectsSortMode.None))
             {
                 Object.DestroyImmediate(sceneGameObject);

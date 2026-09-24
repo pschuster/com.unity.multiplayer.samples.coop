@@ -1,10 +1,10 @@
 using System;
 using Unity.BossRoom.Gameplay.Configuration;
 using Unity.BossRoom.Gameplay.UI;
-using Unity.BossRoom.UnityServices.Auth;
-using Unity.BossRoom.UnityServices.Sessions;
+using Unity.BossRoom.OdinServices.Auth;
+using Unity.BossRoom.OdinServices.Backend;
+using Unity.BossRoom.OdinServices.Sessions;
 using Unity.BossRoom.Utils;
-using Unity.Services.Authentication;
 using UnityEngine;
 using UnityEngine.UI;
 using VContainer;
@@ -28,8 +28,6 @@ namespace Unity.BossRoom.Gameplay.GameState
         [SerializeField]
         SessionUIMediator m_SessionUIMediator;
         [SerializeField]
-        IPUIMediator m_IPUIMediator;
-        [SerializeField]
         Button m_SessionButton;
         [SerializeField]
         GameObject m_SignInSpinner;
@@ -39,7 +37,9 @@ namespace Unity.BossRoom.Gameplay.GameState
         UITooltipDetector m_UGSSetupTooltipDetector;
 
         [Inject]
-        AuthenticationServiceFacade m_AuthServiceFacade;
+        PlayerAuthFacade m_AuthServiceFacade;
+        [Inject]
+        OdinSampleConfig m_OdinSampleConfig;
         [Inject]
         LocalSessionUser m_LocalUser;
         [Inject]
@@ -54,7 +54,7 @@ namespace Unity.BossRoom.Gameplay.GameState
             m_SessionButton.interactable = false;
             m_SessionUIMediator.Hide();
 
-            if (string.IsNullOrEmpty(Application.cloudProjectId))
+            if (!m_OdinSampleConfig.IsConfigured)
             {
                 OnSignInFailed();
                 return;
@@ -68,21 +68,16 @@ namespace Unity.BossRoom.Gameplay.GameState
             base.Configure(builder);
             builder.RegisterComponent(m_NameGenerationData);
             builder.RegisterComponent(m_SessionUIMediator);
-            builder.RegisterComponent(m_IPUIMediator);
         }
 
         async void TrySignIn()
         {
-            try
+            m_ProfileManager.onProfileChanged += OnProfileChanged;
+            if (await m_AuthServiceFacade.SignInAsync(ClientPrefs.GetGuid(), m_ProfileManager.Profile, m_LocalUser.DisplayName))
             {
-                var unityAuthenticationInitOptions =
-                    m_AuthServiceFacade.GenerateAuthenticationOptions(m_ProfileManager.Profile);
-
-                await m_AuthServiceFacade.InitializeAndSignInAsync(unityAuthenticationInitOptions);
                 OnAuthSignIn();
-                m_ProfileManager.onProfileChanged += OnProfileChanged;
             }
-            catch (Exception)
+            else
             {
                 OnSignInFailed();
             }
@@ -94,9 +89,7 @@ namespace Unity.BossRoom.Gameplay.GameState
             m_UGSSetupTooltipDetector.enabled = false;
             m_SignInSpinner.SetActive(false);
 
-            Debug.Log($"Signed in. Unity Player ID {AuthenticationService.Instance.PlayerId}");
-
-            m_LocalUser.ID = AuthenticationService.Instance.PlayerId;
+            m_LocalUser.ID = m_AuthServiceFacade.PlayerId;
 
             // The local SessionUser object will be hooked into UI before the LocalSession is populated during session join, so the LocalSession must know about it already when that happens.
             m_LocalSession.AddUser(m_LocalUser);
@@ -126,16 +119,24 @@ namespace Unity.BossRoom.Gameplay.GameState
         {
             m_SessionButton.interactable = false;
             m_SignInSpinner.SetActive(true);
-            await m_AuthServiceFacade.SwitchProfileAndReSignInAsync(m_ProfileManager.Profile);
+
+            // the profile is part of the Cortex participant identity, so take its name over before signing in:
+            // the participant list then shows the profile instead of the random name of the previous one
+            m_SessionUIMediator.ResetPlayerName();
+
+            var signedIn = await m_AuthServiceFacade.SignInAsync(ClientPrefs.GetGuid(), m_ProfileManager.Profile, m_LocalUser.DisplayName);
+            if (!signedIn)
+            {
+                OnSignInFailed();
+                return;
+            }
 
             m_SessionButton.interactable = true;
             m_SignInSpinner.SetActive(false);
 
-            Debug.Log($"Signed in. Unity Player ID {AuthenticationService.Instance.PlayerId}");
-
             // Updating LocalUser and LocalSession
             m_LocalSession.RemoveUser(m_LocalUser);
-            m_LocalUser.ID = AuthenticationService.Instance.PlayerId;
+            m_LocalUser.ID = m_AuthServiceFacade.PlayerId;
             m_LocalSession.AddUser(m_LocalUser);
         }
 
@@ -143,12 +144,6 @@ namespace Unity.BossRoom.Gameplay.GameState
         {
             m_SessionUIMediator.ToggleJoinSessionUI();
             m_SessionUIMediator.Show();
-        }
-
-        public void OnDirectIPClicked()
-        {
-            m_SessionUIMediator.Hide();
-            m_IPUIMediator.Show();
         }
 
         public void OnChangeProfileClicked()

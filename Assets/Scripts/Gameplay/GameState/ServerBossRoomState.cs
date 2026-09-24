@@ -6,6 +6,7 @@ using Unity.BossRoom.Gameplay.GameplayObjects;
 using Unity.BossRoom.Gameplay.GameplayObjects.Character;
 using Unity.BossRoom.Gameplay.Messages;
 using Unity.BossRoom.Infrastructure;
+using Unity.BossRoom.OdinServices.Sessions;
 using Unity.BossRoom.Utils;
 using Unity.Multiplayer.Samples.BossRoom;
 using Unity.Multiplayer.Samples.Utilities;
@@ -61,6 +62,7 @@ namespace Unity.BossRoom.Gameplay.GameState
 
         [Inject] ConnectionManager m_ConnectionManager;
         [Inject] PersistentGameState m_PersistentGameState;
+        [Inject] GatheringsFacade m_GatheringsFacade;
 
         protected override void Awake()
         {
@@ -84,6 +86,9 @@ namespace Unity.BossRoom.Gameplay.GameState
             NetworkManager.Singleton.SceneManager.OnSynchronizeComplete += OnSynchronizeComplete;
 
             SessionManager<SessionPlayerData>.Instance.OnSessionStarted();
+
+            // marks the lobby as started; with transcription enabled, ODIN Cortex starts transcribing the voice room
+            _ = m_GatheringsFacade.StartGameAsync();
         }
 
         void OnNetworkDespawn()

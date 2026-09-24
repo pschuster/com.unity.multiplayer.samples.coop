@@ -1,0 +1,18 @@
+{
+    "name": "Unity.BossRoom.OdinServices",
+    "rootNamespace": "",
+    "references": [
+        "Unity.BossRoom.Infrastructure",
+        "VContainer",
+        "odinsdk"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

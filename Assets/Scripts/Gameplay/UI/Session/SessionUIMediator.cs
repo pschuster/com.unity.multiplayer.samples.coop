@@ -1,12 +1,12 @@
-using System;
+using System.Threading.Tasks;
 using Unity.BossRoom.Gameplay.Configuration;
 using TMPro;
 using Unity.BossRoom.ConnectionManagement;
 using Unity.BossRoom.Infrastructure;
-using Unity.BossRoom.UnityServices.Auth;
-using Unity.BossRoom.UnityServices.Sessions;
-using Unity.Services.Core;
-using Unity.Services.Multiplayer;
+using Unity.BossRoom.OdinServices.Auth;
+using Unity.BossRoom.OdinServices.Backend;
+using Unity.BossRoom.OdinServices.Sessions;
+using Unity.BossRoom.Utils;
 using UnityEngine;
 using VContainer;
 
@@ -33,45 +33,46 @@ namespace Unity.BossRoom.Gameplay.UI
         [SerializeField]
         GameObject m_LoadingSpinner;
 
-        AuthenticationServiceFacade m_AuthenticationServiceFacade;
-        MultiplayerServicesFacade m_MultiplayerServicesFacade;
+        PlayerAuthFacade m_PlayerAuthFacade;
+        GatheringsFacade m_GatheringsFacade;
         LocalSessionUser m_LocalUser;
         LocalSession m_LocalSession;
         NameGenerationData m_NameGenerationData;
         ConnectionManager m_ConnectionManager;
+        ProfileManager m_ProfileManager;
         ISubscriber<ConnectStatus> m_ConnectStatusSubscriber;
 
         const string k_DefaultSessionName = "no-name";
         const int k_MaxPlayers = 8;
 
-        ISession m_Session;
-
         [Inject]
         void InjectDependenciesAndInitialize(
-            AuthenticationServiceFacade authenticationServiceFacade,
-            MultiplayerServicesFacade multiplayerServicesFacade,
+            PlayerAuthFacade playerAuthFacade,
+            GatheringsFacade gatheringsFacade,
             LocalSessionUser localUser,
             LocalSession localSession,
             NameGenerationData nameGenerationData,
             ISubscriber<ConnectStatus> connectStatusSub,
-            ConnectionManager connectionManager
+            ConnectionManager connectionManager,
+            ProfileManager profileManager
         )
         {
-            m_AuthenticationServiceFacade = authenticationServiceFacade;
+            m_PlayerAuthFacade = playerAuthFacade;
             m_NameGenerationData = nameGenerationData;
             m_LocalUser = localUser;
-            m_MultiplayerServicesFacade = multiplayerServicesFacade;
+            m_GatheringsFacade = gatheringsFacade;
             m_LocalSession = localSession;
             m_ConnectionManager = connectionManager;
+            m_ProfileManager = profileManager;
             m_ConnectStatusSubscriber = connectStatusSub;
-            RegenerateName();
+            ResetPlayerName();
 
             m_ConnectStatusSubscriber.Subscribe(OnConnectStatus);
         }
 
         void OnConnectStatus(ConnectStatus status)
         {
-            if (status is ConnectStatus.GenericDisconnect or ConnectStatus.StartClientFailed)
+            if (status is ConnectStatus.GenericDisconnect or ConnectStatus.StartClientFailed or ConnectStatus.StartHostFailed)
             {
                 UnblockUIAfterLoadingIsComplete();
             }
@@ -82,7 +83,7 @@ namespace Unity.BossRoom.Gameplay.UI
             m_ConnectStatusSubscriber?.Unsubscribe(OnConnectStatus);
         }
 
-        // Multiplayer Services SDK calls done from UI
+        // Lobby requests done from UI. A lobby is joined first; its ODIN room token is what the connection uses.
         public async void CreateSessionRequest(string sessionName, bool isPrivate)
         {
             // before sending request, populate an empty session name, if necessary
@@ -93,24 +94,18 @@ namespace Unity.BossRoom.Gameplay.UI
 
             BlockUIWhileLoadingIsInProgress();
 
-            var playerIsAuthorized = await m_AuthenticationServiceFacade.EnsurePlayerIsAuthorized();
-
-            if (!playerIsAuthorized)
+            if (!await EnsureSignedIn())
             {
-                UnblockUIAfterLoadingIsComplete();
                 return;
             }
 
-            m_ConnectionManager.StartHostSession(m_LocalUser.DisplayName);
-
-            var result = await m_MultiplayerServicesFacade.TryCreateSessionAsync(sessionName, k_MaxPlayers, isPrivate);
-
-            HandleSessionJoinResult(result);
+            var result = await m_GatheringsFacade.TryCreateLobbyAsync(sessionName, k_MaxPlayers, isPrivate);
+            HandleLobbyResult(result.Success, host: true);
         }
 
         public async void QuerySessionRequest(bool blockUI)
         {
-            if (Unity.Services.Core.UnityServices.State != ServicesInitializationState.Initialized)
+            if (!m_GatheringsFacade.SupportsLobbyList || !m_PlayerAuthFacade.IsSignedIn)
             {
                 return;
             }
@@ -120,15 +115,7 @@ namespace Unity.BossRoom.Gameplay.UI
                 BlockUIWhileLoadingIsInProgress();
             }
 
-            var playerIsAuthorized = await m_AuthenticationServiceFacade.EnsurePlayerIsAuthorized();
-
-            if (blockUI && !playerIsAuthorized)
-            {
-                UnblockUIAfterLoadingIsComplete();
-                return;
-            }
-
-            await m_MultiplayerServicesFacade.RetrieveAndPublishSessionListAsync();
+            await m_GatheringsFacade.RetrieveAndPublishLobbyListAsync();
 
             if (blockUI)
             {
@@ -140,79 +127,79 @@ namespace Unity.BossRoom.Gameplay.UI
         {
             BlockUIWhileLoadingIsInProgress();
 
-            var playerIsAuthorized = await m_AuthenticationServiceFacade.EnsurePlayerIsAuthorized();
-
-            if (!playerIsAuthorized)
+            if (!await EnsureSignedIn())
             {
-                UnblockUIAfterLoadingIsComplete();
                 return;
             }
 
-            m_ConnectionManager.StartClientSession(m_LocalUser.DisplayName);
-
-            var result = await m_MultiplayerServicesFacade.TryJoinSessionByCodeAsync(sessionCode);
-
-            HandleSessionJoinResult(result);
+            var result = await m_GatheringsFacade.TryJoinLobbyByCodeAsync(sessionCode);
+            HandleLobbyResult(result.Success, host: false);
         }
 
-        public async void JoinSessionRequest(ISessionInfo sessionInfo)
+        public async void JoinSessionRequest(LobbyInfo lobby)
         {
             BlockUIWhileLoadingIsInProgress();
 
-            var playerIsAuthorized = await m_AuthenticationServiceFacade.EnsurePlayerIsAuthorized();
-
-            if (!playerIsAuthorized)
+            if (!await EnsureSignedIn())
             {
-                UnblockUIAfterLoadingIsComplete();
                 return;
             }
 
-            m_ConnectionManager.StartClientSession(m_LocalUser.DisplayName);
-
-            var result = await m_MultiplayerServicesFacade.TryJoinSessionByNameAsync(sessionInfo.Id);
-
-            HandleSessionJoinResult(result);
+            var result = await m_GatheringsFacade.TryJoinLobbyByIdAsync(lobby.id);
+            HandleLobbyResult(result.Success, host: false);
         }
 
         public async void QuickJoinRequest()
         {
             BlockUIWhileLoadingIsInProgress();
 
-            var playerIsAuthorized = await m_AuthenticationServiceFacade.EnsurePlayerIsAuthorized();
+            if (!await EnsureSignedIn())
+            {
+                return;
+            }
 
-            if (!playerIsAuthorized)
+            var result = await m_GatheringsFacade.TryQuickJoinLobbyAsync();
+            if (result.NoLobbyFound)
+            {
+                // like matchmaking: nobody to join, so open a lobby for others
+                var created = await m_GatheringsFacade.TryCreateLobbyAsync($"{m_LocalUser.DisplayName}'s game", k_MaxPlayers, false);
+                HandleLobbyResult(created.Success, host: true);
+                return;
+            }
+
+            HandleLobbyResult(result.Success, host: false);
+        }
+
+        async Task<bool> EnsureSignedIn()
+        {
+            if (await m_PlayerAuthFacade.EnsurePlayerIsAuthorized(m_LocalUser.DisplayName))
+            {
+                m_LocalUser.ID = m_PlayerAuthFacade.PlayerId;
+                return true;
+            }
+
+            UnblockUIAfterLoadingIsComplete();
+            return false;
+        }
+
+        void HandleLobbyResult(bool success, bool host)
+        {
+            if (!success)
             {
                 UnblockUIAfterLoadingIsComplete();
                 return;
             }
 
-            m_ConnectionManager.StartHostSession(m_LocalUser.DisplayName);
+            Debug.Log($"Joined lobby with ID: {m_LocalSession.SessionID}");
 
-            var result = await m_MultiplayerServicesFacade.TryQuickJoinSessionAsync();
-
-            HandleSessionJoinResult(result);
-        }
-
-        void HandleSessionJoinResult((bool Success, ISession Session) result)
-        {
-            if (result.Success)
+            if (host)
             {
-                OnJoinedSession(result.Session);
+                m_ConnectionManager.StartHostSession(m_LocalUser.DisplayName);
             }
             else
             {
-                m_ConnectionManager.RequestShutdown();
-                UnblockUIAfterLoadingIsComplete();
+                m_ConnectionManager.StartClientSession(m_LocalUser.DisplayName);
             }
-        }
-
-        void OnJoinedSession(ISession remoteSession)
-        {
-            m_MultiplayerServicesFacade.SetRemoteSession(remoteSession);
-
-            Debug.Log($"Joined session with ID: {m_LocalSession.SessionID}");
-
-            m_ConnectionManager.StartClientSession(m_LocalUser.DisplayName);
         }
 
         //show/hide UI
@@ -251,10 +238,28 @@ namespace Unity.BossRoom.Gameplay.UI
             m_CreateToggleTabBlocker.SetToColor(1);
         }
 
+        /// <summary>
+        /// Names the player after the profile they picked, and rolls a random name while there is none. The name
+        /// travels to Cortex on the next sign-in, so the participant list shows the profile rather than a random name.
+        /// </summary>
+        public void ResetPlayerName()
+        {
+            SetPlayerName(m_ProfileManager.PlayerChosenProfile ?? m_NameGenerationData.GenerateName());
+        }
+
+        /// <summary>
+        /// Hooked up to the dice button next to the name: an explicit roll wins over the profile name until the
+        /// player switches profiles again.
+        /// </summary>
         public void RegenerateName()
         {
-            m_LocalUser.DisplayName = m_NameGenerationData.GenerateName();
-            m_PlayerNameLabel.text = m_LocalUser.DisplayName;
+            SetPlayerName(m_NameGenerationData.GenerateName());
+        }
+
+        void SetPlayerName(string name)
+        {
+            m_LocalUser.DisplayName = name;
+            m_PlayerNameLabel.text = name;
         }
 
         void BlockUIWhileLoadingIsInProgress()
